@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+tracker.csv
+tracker_old.csv
+.streamlit/secrets.toml
+venv/
+sample_data/resume.md
