@@ -22,15 +22,16 @@ pipeline at a glance.
 
 ## How it works
 
-**1. Search & Score** — pulls live listings from two sources: Remotive (broad
-job board) and Greenhouse (direct per-company boards — configurable list of
-companies). A title allowlist/blocklist filters out the noise both APIs are
-prone to (a "product manager" search returning "Accounts Payable Assistant"
-because the word "product" appears somewhere in the description). Every result
-gets a fast, cheap rubric score (Haiku) plus a Posting Legitimacy read (does
-this look like a real, active opening) and a Compensation Reliability read
-(does the advertised number look like real base pay or inflated OTE), with
-salary and location extracted wherever the source states them.
+**1. Search & Score** — pulls live listings from three sources: Remotive (broad
+job board), Greenhouse, and Ashby (both direct per-company boards —
+configurable list of companies for each). A title allowlist/blocklist filters
+out the noise these APIs are prone to (a "product manager" search returning
+"Accounts Payable Assistant" because the word "product" appears somewhere in
+the description). Every result gets a fast, cheap rubric score (Haiku) plus a
+Posting Legitimacy read (does this look like a real, active opening) and a
+Compensation Reliability read (does the advertised number look like real base
+pay or inflated OTE), with salary and location extracted wherever the source
+states them.
 
 **2. Deep Dive** — on any listing worth a closer look, a full five-perspective
 panel (Sonnet) runs, citing specific sections of your resume, and returns a
@@ -43,10 +44,20 @@ detects which of six PM archetypes the role fits and foregrounds the matching
 experience, weaves in the JD's own terminology where honestly applicable, and
 opens the cover letter with a real project parallel when one genuinely exists.
 Hard rule, enforced in the prompt: never invents experience, employers, dates,
-or metrics not already in your resume. Renders to clean, single-column,
-ATS-safe PDFs (region-aware — Letter for US/Canada, A4 elsewhere).
+or metrics not already in your resume. The cover letter always opens with
+"Dear Hiring Manager," caps em dash use at one per letter, avoids AI-sounding
+stock phrases ("leverage," "proven track record," "results-oriented," etc.),
+and includes your portfolio/GitHub links in the signature if you've entered
+them in the sidebar. Renders to clean, single-column, ATS-safe PDFs
+(region-aware — Letter for US/Canada, A4 elsewhere).
 
-**4. Dashboard** — every deep-dive is logged to a local CSV tracker, with the
+**4. Email notifications** — optional. Enter your own email and an app
+password (Gmail requires an App Password, not your regular one) in the
+sidebar, and either click "Email me this summary" on any Deep Dive result or
+turn on auto-send for every run. Sent via your own SMTP account; nothing goes
+out unless you explicitly enable it.
+
+**5. Dashboard** — every deep-dive is logged to a local CSV tracker, with the
 schema auto-migrating (old file archived, not corrupted) if a future update
 changes what's tracked.
 
@@ -55,10 +66,12 @@ changes what's tracked.
 - **Streamlit** — UI
 - **Anthropic API (Claude)** — Haiku for the fast triage pass, Sonnet for the
   deep-dive panel and tailoring
-- **Remotive + Greenhouse APIs** — live job search, no scraping
+- **Remotive + Greenhouse + Ashby APIs** — live job search, no scraping
 - **requests + BeautifulSoup** — fallback JD extraction for pasted URLs
 - **reportlab** — ATS-safe PDF rendering (single-column, standard fonts, no
   tables/images that trip parsers)
+- **smtplib** (standard library) — optional email summaries via your own SMTP
+  account
 - **CSV** — zero-setup local tracker, no database needed for an MVP
 
 ## Run it
@@ -72,18 +85,30 @@ streamlit run app.py
 Or paste your API key directly into the sidebar at runtime — it's never
 written to disk.
 
+## Your resume
+
+`sample_data/resume.md` is gitignored on purpose — it's meant to hold your
+real resume and is never committed. A fictional placeholder,
+`sample_data/resume.example.md`, ships in the repo so the app has a working
+default out of the box. To use your own: either paste it into the sidebar at
+runtime, or replace `sample_data/resume.md` locally (it'll stay untracked).
+If you fork this repo, double-check `git ls-files | grep resume` only shows
+`resume.example.md` before you push.
+
 ## What this deliberately doesn't do
 
 - No auto-apply — every application is your call, nothing gets submitted
 - No invented experience, employers, or metrics — the tailoring prompt is
   built around this as a hard rule, not a suggestion
+- No auto-email by default — summary emails only send if you explicitly
+  enable auto-send or click "send now"
 - No cloud storage — the tracker is a local CSV; nothing leaves your machine
-  except what you send to the Anthropic API
+  except what you send to the Anthropic API (and, if you opt in, your own
+  SMTP server for email summaries)
 
 ## Roadmap
 
-- [ ] Additional job sources (Lever, Ashby) for companies not on
-      Remotive/Greenhouse
+- [ ] Lever as a fourth job source, for companies not on Remotive/Greenhouse/Ashby
 - [ ] SQLite instead of CSV once the tracker needs querying, not just viewing
 - [ ] Posting liveness check (flag closed/stale listings before scoring them)
 - [ ] Cost tracking per session (rough token spend estimate)
