@@ -3,6 +3,8 @@ __pycache__/
 .env
 tracker.csv
 tracker_old.csv
+scan_history.csv
+scan_history_old.csv
 .streamlit/secrets.toml
 venv/
 sample_data/resume.md

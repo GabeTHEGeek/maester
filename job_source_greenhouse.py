@@ -12,6 +12,7 @@ Docs: https://developers.greenhouse.io/job-board.html
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -88,8 +89,19 @@ def search_greenhouse(
     boards_checked = []
     boards_failed = []
 
+    # Fetch every board's postings in parallel — this is the network-bound
+    # part, and boards don't depend on each other, so there's no reason to
+    # wait on them one at a time. Filtering afterward is cheap and stays
+    # sequential (in board order) so results are deterministic.
+    raw_by_board = {}
+    with ThreadPoolExecutor(max_workers=min(8, len(boards) or 1)) as executor:
+        future_to_board = {executor.submit(_fetch_board, board): board for board in boards}
+        for future in as_completed(future_to_board):
+            board = future_to_board[future]
+            raw_by_board[board] = future.result()
+
     for board in boards:
-        raw_jobs = _fetch_board(board)
+        raw_jobs = raw_by_board.get(board, [])
         if not raw_jobs:
             boards_failed.append(board)
             continue

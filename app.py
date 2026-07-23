@@ -15,13 +15,14 @@ import streamlit as st
 import job_source
 import job_source_ashby
 import job_source_greenhouse
+from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
 from extract import extract_salary
 from fetch_job import fetch_job_text
 from job_source import search_jobs
 from panel_engine import run_panel
 from pdf_export import render_cover_letter_pdf, render_resume_pdf
-from rubric_engine import batch_score
+from rubric_engine import batch_score, quick_score_from_cache
 from tailor_engine import generate_tailored_materials
 from tracker import load_all, log_result
 
@@ -234,12 +235,33 @@ with tab_search:
                 st.warning("No listings found across the selected sources. Try a broader term or more boards.")
             else:
                 st.session_state.jobs_by_id = {str(j.get("id", j["url"])): j for j in jobs}
-                with st.spinner(f"Scoring {len(jobs)} listings against your resume..."):
-                    try:
-                        results = batch_score(resume_text, jobs, api_key)
-                        st.session_state.search_results = results
-                    except Exception as e:
-                        st.error(f"Scoring failed: {e}")
+
+                seen = load_seen_urls()
+                new_jobs = [j for j in jobs if j.get("url") not in seen]
+                cached_jobs = [j for j in jobs if j.get("url") in seen]
+
+                results = [
+                    quick_score_from_cache(seen[j["url"]], str(j.get("id", j["url"])))
+                    for j in cached_jobs
+                ]
+
+                if new_jobs:
+                    with st.spinner(f"Scoring {len(new_jobs)} new listings against your resume..."):
+                        try:
+                            new_results = batch_score(resume_text, new_jobs, api_key)
+                            results.extend(new_results)
+                            record_scans(new_results)
+                        except Exception as e:
+                            st.error(f"Scoring failed: {e}")
+
+                results.sort(key=lambda r: r.score, reverse=True)
+                st.session_state.search_results = results
+
+                if cached_jobs:
+                    st.caption(
+                        f"Skipped re-scoring {len(cached_jobs)} listing(s) already seen in a previous "
+                        f"search — reused the cached score instead of another API call."
+                    )
 
     if st.session_state.search_results:
         st.markdown(f"### {len(st.session_state.search_results)} listings ranked")

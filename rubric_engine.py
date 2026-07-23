@@ -165,3 +165,24 @@ def batch_score(resume_text: str, jobs: list[dict], api_key: str, max_workers: i
                 )
     results.sort(key=lambda r: r.score, reverse=True)
     return results
+
+
+def quick_score_from_cache(row: dict, job_id: str) -> QuickScore:
+    """Reconstructs a QuickScore from a scan_history.csv row, for a listing
+    that's already been scanned before — no API call needed."""
+    return QuickScore(
+        job_id=job_id,
+        title=row.get("title", ""),
+        company=row.get("company", ""),
+        url=row.get("url", ""),
+        score=float(row.get("score") or 0),
+        grade=row.get("grade", "?"),
+        reason=row.get("reason", ""),
+        source=row.get("source", "unknown"),
+        board=row.get("board", "unknown"),
+        location=row.get("location", ""),
+        salary=row.get("salary", ""),
+        legitimacy_tier=row.get("legitimacy_tier", ""),
+        legitimacy_note=row.get("legitimacy_note", ""),
+        comp_reliability=row.get("comp_reliability", ""),
+    )

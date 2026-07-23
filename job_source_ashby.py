@@ -8,6 +8,7 @@ Docs: https://developers.ashbyhq.com/reference/jobboardapi-jobboard-info
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
@@ -92,8 +93,15 @@ def search_ashby(
     boards_checked = []
     boards_failed = []
 
+    raw_by_board = {}
+    with ThreadPoolExecutor(max_workers=min(8, len(boards) or 1)) as executor:
+        future_to_board = {executor.submit(_fetch_board, board): board for board in boards}
+        for future in as_completed(future_to_board):
+            board = future_to_board[future]
+            raw_by_board[board] = future.result()
+
     for board in boards:
-        raw_jobs = _fetch_board(board)
+        raw_jobs = raw_by_board.get(board, [])
         if not raw_jobs:
             boards_failed.append(board)
             continue
