@@ -40,6 +40,19 @@ Score overall fit on this scale:
 Be brutally honest. Never inflate the score to be encouraging. Distinguish between
 real gaps (missing experience) and presentation gaps (has it, resume hides it).
 
+CANDIDATE'S AI PROFILE — apply this precisely, don't blur it: the candidate's AI
+experience is applied AI / LLM product engineering — prompt engineering for
+structured output, multi-model orchestration, agentic workflow architecture, API
+integration, and LLM reliability debugging. This is NOT deep ML (no model
+training/fine-tuning), NOT production ML infrastructure (no deployment pipelines,
+serving infra, or scaling systems), and NOT classical ML (no regression,
+classification, or embeddings work). A listing mentioning "AI" or "ML" is not
+automatically a good match — check whether it actually wants applied LLM product
+work (strong fit) versus deep ML research, model training, or ML infra ownership
+(a real gap, not something to paper over). The Engineering Lead panelist in
+particular should apply this distinction rather than crediting general "AI
+experience" for roles that need infra/research depth the candidate hasn't built.
+
 The resume is provided as structured Markdown with clear section headers (##) and
 role subsections (###). When a panelist claims a match or a gap, ground it in a
 specific section or bullet from the resume where possible (e.g. "under Twitch —

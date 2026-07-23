@@ -30,9 +30,15 @@ decisions, writes/reviews production code, "AI-native" tooling requirements aime
 engineers, reports into engineering rather than product). Score based on the
 listing's actual substantive requirements, not surface term matching against the resume.
 
+CANDIDATE'S AI PROFILE: applied AI/LLM product engineering (prompt engineering,
+multi-model orchestration, agentic workflow design, API integration) — NOT deep ML,
+NOT ML infra/deployment, NOT classical ML. A listing wanting model training, ML infra
+ownership, or research-scientist depth is a real gap even if it says "AI."
+
 Dimensions:
 - Role/Skills match (gate: if this is weak, OR if the role's actual substance is
-  technical/engineering despite a PM-sounding title, cap the overall score at 2.5
+  technical/engineering despite a PM-sounding title, OR if it requires deep
+  ML/infra depth the candidate doesn't have, cap the overall score at 2.5
   regardless of other dimensions)
 - Seniority fit (over- or under-leveled counts against it)
 - Domain/industry relevance

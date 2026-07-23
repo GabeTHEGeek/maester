@@ -34,6 +34,19 @@ HARD RULES — violating these is a serious failure:
 - If a JD requirement has no honest basis in the resume, do not paper over the
   gap with vague language designed to imply experience that isn't there.
 
+AI POSITIONING — apply this precisely: the candidate is an applied AI/LLM product
+builder — prompt engineering for structured output, multi-model orchestration
+(routing cheap/fast vs. careful/expensive models by task), agentic workflow
+architecture, API integration, and LLM reliability debugging (catching calibration
+failures, truncation/retry handling). Use this precise framing, not generic "AI
+Engineer" or "Machine Learning Engineer" language the resume can't back up. Never
+reframe this experience toward deep ML (model training/fine-tuning), ML
+infrastructure (deployment pipelines, serving, scaling), or classical ML
+(regression, classification, embeddings) — none of that is in the resume, and
+implying it in tailored language would be exactly the kind of misrepresentation
+the hard rules above forbid. If the JD wants that kind of depth, that's a real gap
+to leave visible, not word around.
+
 ARCHETYPE DETECTION: classify the listing into one of these product-management
 archetypes (or a hybrid of two), based on signals in the JD:
 - AI Product Strategy — "roadmap", "vision", "0-to-1", "product strategy"
@@ -65,18 +78,38 @@ the summary/headline to foreground the detected archetype. Keep the same
 structure (same headers, same roles, same companies, same dates) and the same
 overall length — this is a reordering and rewording pass, not a rewrite.
 
-TASK 2 — Cover letter: 3-4 paragraphs. Open with a concrete parallel between
-one of the candidate's own AI projects (from the AI Projects section of the
-resume — Karla, Rudy, Brand Companion Agent, or a project explicitly mentioned
+TASK 2 — Cover letter: 3-4 paragraphs.
+
+FORMAT RULES (non-negotiable):
+- Always open with the literal line "Dear Hiring Manager," as its own line,
+  even if a hiring manager's name appears elsewhere in context — do not
+  guess at or invent a name to personalize the salutation.
+- At most ONE em dash in the entire letter. Prefer periods, commas, or
+  semicolons to join related ideas instead.
+- Sign off with the candidate's name (parsed from the resume header), and on
+  the line(s) below it, include the candidate's portfolio and/or GitHub link
+  if provided in the CANDIDATE LINKS section below — format as "Portfolio:
+  {url}" and "GitHub: {url}" on their own lines. Omit any link not provided;
+  never invent one.
+
+TONE RULES (non-negotiable):
+- Professional and human, not AI-generated-sounding. Avoid: "passionate
+  about," "proven track record," "synergies," "leverage" (say "use" or name
+  the tool), "spearheaded" (say "led"), "facilitated" (say "ran" or "set
+  up"), "robust," "seamless," "cutting-edge," "innovative," "in today's
+  fast-paced world," "demonstrated ability to," "results-oriented," "best
+  practices" (name the actual practice instead).
+- Vary sentence length and structure. Do not open consecutive sentences with
+  the same word or structure.
+
+CONTENT: after the salutation, open with a concrete parallel between one of
+the candidate's own AI projects (from the AI Projects section of the resume —
+Karla, Rudy, Brand Companion Agent, Maester, or a project explicitly mentioned
 in additional context below) and what this specific role would have them
-build — the way a strong technical cover letter opens with proof, not a
-claim. Only do this if a genuine, honest parallel exists; if none of the
-candidate's projects meaningfully connects to this role, open with the
-strongest resume-grounded hook instead. Ground the rest in 2-3 specific JD
-requirements mapped to specific resume proof points. Plain, direct, no
-corporate-speak, no "passionate about" / "proven track record" / "synergies"
-style filler. Sign off with the candidate's name (parsed from the resume
-header).
+build — proof, not a claim. Only do this if a genuine, honest parallel exists;
+if none of the candidate's projects meaningfully connects to this role, open
+with the strongest resume-grounded hook instead. Ground the rest in 2-3
+specific JD requirements mapped to specific resume proof points.
 
 Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 {
@@ -108,11 +141,22 @@ def generate_tailored_materials(
     top_gaps: list,
     resume_fixes: list,
     api_key: str,
+    portfolio_url: str = "",
+    github_url: str = "",
     model: str = TAILOR_MODEL,
 ) -> dict:
     """Returns {"tailored_resume_markdown": str, "cover_letter": str,
     "keywords_emphasized": list, "changes_summary": list}."""
     client = anthropic.Anthropic(api_key=api_key)
+
+    links_block = ""
+    if portfolio_url or github_url:
+        lines = ["CANDIDATE LINKS (include in the cover letter signature, exactly as given, never invent one not listed here):"]
+        if portfolio_url:
+            lines.append(f"Portfolio: {portfolio_url}")
+        if github_url:
+            lines.append(f"GitHub: {github_url}")
+        links_block = "\n".join(lines) + "\n"
 
     user_prompt = f"""RESUME (Markdown, source of truth — do not invent beyond this):
 {resume_text}
@@ -125,7 +169,8 @@ Role: {role_title}
 HIRING PANEL'S FINDINGS (use these to guide what to emphasize, not what to invent):
 Top gaps identified: {"; ".join(top_gaps) if top_gaps else "none noted"}
 Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none noted"}
-"""
+
+{links_block}"""
 
     response = client.messages.create(
         model=model,

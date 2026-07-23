@@ -13,7 +13,9 @@ import tempfile
 import streamlit as st
 
 import job_source
+import job_source_ashby
 import job_source_greenhouse
+from email_notify import build_deep_dive_summary, send_summary_email
 from extract import extract_salary
 from fetch_job import fetch_job_text
 from job_source import search_jobs
@@ -72,6 +74,31 @@ with st.sidebar:
         resume_text = load_default_resume()
         st.text_area("Preview", value=resume_text, height=200, disabled=True)
 
+    st.divider()
+    st.subheader("Links (optional)")
+    st.caption("Included in tailored cover letter signatures when provided.")
+    portfolio_url = st.text_input("Portfolio URL", value="")
+    github_url = st.text_input("GitHub URL", value="")
+
+    st.divider()
+    with st.expander("Email notifications (optional)"):
+        st.caption(
+            "Sends via your own SMTP account. For Gmail, use an App Password, "
+            "not your regular password (Google Account → Security → App passwords). "
+            "Nothing is sent unless you enable auto-send below or click 'Send now'."
+        )
+        smtp_email = st.text_input("Your email address", value="", key="smtp_email")
+        smtp_password = st.text_input("App password", value="", type="password", key="smtp_password")
+        recipient_email = st.text_input(
+            "Send summary to", value="", placeholder="defaults to your email above", key="recipient_email"
+        )
+        col_srv, col_port = st.columns([2, 1])
+        with col_srv:
+            smtp_server = st.text_input("SMTP server", value="smtp.gmail.com", key="smtp_server")
+        with col_port:
+            smtp_port = st.number_input("Port", value=587, key="smtp_port")
+        auto_email = st.checkbox("Automatically email me a summary after each Deep Dive run", value=False)
+
 tab_search, tab_deep_dive, tab_dashboard = st.tabs(
     ["Search & Score", "Deep Dive", "Dashboard"]
 )
@@ -92,15 +119,21 @@ with tab_search:
     with st.expander("Search filters"):
         sources = st.multiselect(
             "Search sources",
-            options=["Remotive", "Greenhouse"],
-            default=["Remotive", "Greenhouse"],
-            help="Remotive is a broad job board (full-text matched). Greenhouse pulls directly from specific companies' own job boards (title-matched, no full-text noise).",
+            options=["Remotive", "Greenhouse", "Ashby"],
+            default=["Remotive", "Greenhouse", "Ashby"],
+            help="Remotive is a broad job board (full-text matched). Greenhouse and Ashby pull directly from specific companies' own job boards (title-matched, no full-text noise).",
         )
         greenhouse_boards = st.multiselect(
             "Greenhouse companies to check",
             options=job_source_greenhouse.DEFAULT_BOARDS,
             default=job_source_greenhouse.DEFAULT_BOARDS,
             help="Company slugs as used in their Greenhouse board URL. Add more by editing DEFAULT_BOARDS in job_source_greenhouse.py.",
+        )
+        ashby_boards = st.multiselect(
+            "Ashby companies to check",
+            options=job_source_ashby.DEFAULT_BOARDS,
+            default=job_source_ashby.DEFAULT_BOARDS,
+            help="Company slugs as used in their Ashby board URL (jobs.ashbyhq.com/{slug}). Add more by editing DEFAULT_BOARDS in job_source_ashby.py.",
         )
         category = st.selectbox(
             "Remotive category",
@@ -166,6 +199,25 @@ with tab_search:
                     except Exception as e:
                         st.error(f"Greenhouse search failed: {e}")
 
+            if "Ashby" in sources:
+                with st.spinner(f"Checking {len(ashby_boards)} Ashby boards for '{query}'..."):
+                    try:
+                        ab_jobs, ab_meta = job_source_ashby.search_ashby(
+                            query,
+                            boards=ashby_boards,
+                            limit=int(limit),
+                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
+                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                        )
+                        jobs.extend(ab_jobs)
+                        if ab_meta.get("boards_failed"):
+                            st.caption(
+                                f"Ashby boards that returned nothing (dead token or no matches): "
+                                f"{', '.join(ab_meta['boards_failed'])}"
+                            )
+                    except Exception as e:
+                        st.error(f"Ashby search failed: {e}")
+
             if search_meta.get("broadened"):
                 note = f"No Remotive listings matched \"{search_meta['original_query']}\" with the current filters, so I broadened that search"
                 changes = []
@@ -207,7 +259,12 @@ with tab_search:
             with st.container(border=True):
                 c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
                 with c1:
-                    source_label = f"Greenhouse · {r.board}" if r.source == "greenhouse" else "Remotive"
+                    if r.source == "greenhouse":
+                        source_label = f"Greenhouse · {r.board}"
+                    elif r.source == "ashby":
+                        source_label = f"Ashby · {r.board}"
+                    else:
+                        source_label = "Remotive"
                     meta_bits = [source_label]
                     if r.location:
                         meta_bits.append(r.location)
@@ -284,6 +341,21 @@ with tab_deep_dive:
                     st.session_state.deep_dive_result = result
                     st.session_state.deep_dive_job_text = job_text
                     st.session_state.tailored_materials = None
+
+                    if auto_email and smtp_email and smtp_password:
+                        try:
+                            send_summary_email(
+                                smtp_email=smtp_email,
+                                smtp_password=smtp_password,
+                                recipient=recipient_email or smtp_email,
+                                subject=f"Maester: {result.role_title} at {result.company} — {result.fit_score}/100",
+                                body=build_deep_dive_summary(result),
+                                smtp_server=smtp_server,
+                                smtp_port=int(smtp_port),
+                            )
+                            st.success("Summary emailed.")
+                        except Exception as e:
+                            st.warning(f"Deep dive completed, but the email failed to send: {e}")
                 except Exception as e:
                     st.error(f"Something went wrong: {e}")
 
@@ -306,8 +378,28 @@ with tab_deep_dive:
             meta_bits.append(f"💰 {result.salary}")
         if meta_bits:
             st.caption(" · ".join(meta_bits))
-        if result.job_url:
-            st.link_button("Open listing ↗", result.job_url)
+        col_open, col_email = st.columns([1, 1])
+        with col_open:
+            if result.job_url:
+                st.link_button("Open listing ↗", result.job_url)
+        with col_email:
+            if st.button("Email me this summary"):
+                if not smtp_email or not smtp_password:
+                    st.error("Add your email and app password in the sidebar first.")
+                else:
+                    try:
+                        send_summary_email(
+                            smtp_email=smtp_email,
+                            smtp_password=smtp_password,
+                            recipient=recipient_email or smtp_email,
+                            subject=f"Maester: {result.role_title} at {result.company} — {result.fit_score}/100",
+                            body=build_deep_dive_summary(result),
+                            smtp_server=smtp_server,
+                            smtp_port=int(smtp_port),
+                        )
+                        st.success("Sent.")
+                    except Exception as e:
+                        st.error(f"Email failed to send: {e}")
 
         st.markdown("### Panel verdicts")
         for p in result.panelists:
@@ -369,6 +461,8 @@ with tab_deep_dive:
                         top_gaps=result.top_gaps,
                         resume_fixes=result.resume_fixes,
                         api_key=api_key,
+                        portfolio_url=portfolio_url,
+                        github_url=github_url,
                     )
                     st.session_state.tailored_materials = materials
                 except Exception as e:
