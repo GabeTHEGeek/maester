@@ -24,10 +24,15 @@ pipeline at a glance.
 
 **1. Search & Score** — pulls live listings from three sources: Remotive (broad
 job board), Greenhouse, and Ashby (both direct per-company boards —
-configurable list of companies for each). A title allowlist/blocklist filters
-out the noise these APIs are prone to (a "product manager" search returning
-"Accounts Payable Assistant" because the word "product" appears somewhere in
-the description). Every result gets a fast, cheap rubric score (Haiku) plus a
+configurable list of companies for each, fetched in parallel so checking a
+dozen companies doesn't mean waiting on a dozen sequential API calls). A title
+allowlist/blocklist filters out the noise these APIs are prone to (a "product
+manager" search returning "Accounts Payable Assistant" because the word
+"product" appears somewhere in the description). Every listing you've already
+scanned in a past search gets skipped, not re-scored, a local scan history
+tracks every URL that's already been through the rubric, and reuses that
+result instead of burning another API call on something you already have an
+answer for. New listings get a fast, cheap rubric score (Haiku) plus a
 Posting Legitimacy read (does this look like a real, active opening) and a
 Compensation Reliability read (does the advertised number look like real base
 pay or inflated OTE), with salary and location extracted wherever the source
@@ -102,9 +107,9 @@ If you fork this repo, double-check `git ls-files | grep resume` only shows
   built around this as a hard rule, not a suggestion
 - No auto-email by default — summary emails only send if you explicitly
   enable auto-send or click "send now"
-- No cloud storage — the tracker is a local CSV; nothing leaves your machine
-  except what you send to the Anthropic API (and, if you opt in, your own
-  SMTP server for email summaries)
+- No cloud storage — the tracker and scan history are both local CSVs;
+  nothing leaves your machine except what you send to the Anthropic API (and,
+  if you opt in, your own SMTP server for email summaries)
 
 ## Roadmap
 
