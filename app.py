@@ -15,6 +15,7 @@ import streamlit as st
 import job_source
 import job_source_ashby
 import job_source_greenhouse
+from company_registry import add_company, load_registry, record_discovery, save_registry, tokens_for_platform
 from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
 from extract import extract_salary
@@ -77,7 +78,8 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Links (optional)")
-    st.caption("Included in tailored cover letter signatures when provided.")
+    st.caption("Included as hyperlinks in the header of both the tailored resume and cover letter, when provided.")
+    linkedin_url = st.text_input("LinkedIn URL", value="")
     portfolio_url = st.text_input("Portfolio URL", value="")
     github_url = st.text_input("GitHub URL", value="")
 
@@ -124,18 +126,52 @@ with tab_search:
             default=["Remotive", "Greenhouse", "Ashby"],
             help="Remotive is a broad job board (full-text matched). Greenhouse and Ashby pull directly from specific companies' own job boards (title-matched, no full-text noise).",
         )
+        if "company_registry" not in st.session_state:
+            st.session_state.company_registry = load_registry()
+        registry_rows = st.session_state.company_registry
+
+        gh_registry_tokens = tokens_for_platform(registry_rows, "greenhouse")
+        ab_registry_tokens = tokens_for_platform(registry_rows, "ashby")
+
         greenhouse_boards = st.multiselect(
             "Greenhouse companies to check",
-            options=job_source_greenhouse.DEFAULT_BOARDS,
-            default=job_source_greenhouse.DEFAULT_BOARDS,
-            help="Company slugs as used in their Greenhouse board URL. Add more by editing DEFAULT_BOARDS in job_source_greenhouse.py.",
+            options=gh_registry_tokens,
+            default=gh_registry_tokens,
+            help="Includes companies marked 'unknown' platform too — those get tried here and on Ashby, and the registry below records whichever one actually works.",
         )
         ashby_boards = st.multiselect(
             "Ashby companies to check",
-            options=job_source_ashby.DEFAULT_BOARDS,
-            default=job_source_ashby.DEFAULT_BOARDS,
-            help="Company slugs as used in their Ashby board URL (jobs.ashbyhq.com/{slug}). Add more by editing DEFAULT_BOARDS in job_source_ashby.py.",
+            options=ab_registry_tokens,
+            default=ab_registry_tokens,
+            help="Includes companies marked 'unknown' platform too — those get tried here and on Greenhouse, and the registry below records whichever one actually works.",
         )
+
+        with st.expander("Manage companies (add, edit, verify)"):
+            st.caption(
+                "Edit directly — add a row, fix a wrong platform, or add notes. "
+                "'verified' means confirmed by a real search hit; 'unverified' is a guess; "
+                "'unknown' platform gets tried on both Greenhouse and Ashby until discovered."
+            )
+            edited_rows = st.data_editor(
+                registry_rows,
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "platform": st.column_config.SelectboxColumn(
+                        options=["greenhouse", "ashby", "unknown"]
+                    ),
+                    "status": st.column_config.SelectboxColumn(
+                        options=["verified", "unverified", "failed"]
+                    ),
+                },
+                key="company_editor",
+            )
+            if st.button("Save company changes"):
+                st.session_state.company_registry = edited_rows
+                save_registry(edited_rows)
+                st.success("Saved. Re-open this panel's dropdowns above to see new companies.")
+                st.rerun()
+
         category = st.selectbox(
             "Remotive category",
             options=["product", "project-management", "all-others", None],
@@ -166,6 +202,8 @@ with tab_search:
         else:
             jobs = []
             search_meta = {}
+            gh_meta = {}
+            ab_meta = {}
 
             if "Remotive" in sources:
                 with st.spinner(f"Searching Remotive for '{query}'..."):
@@ -218,6 +256,22 @@ with tab_search:
                             )
                     except Exception as e:
                         st.error(f"Ashby search failed: {e}")
+
+            # Self-correcting registry: whatever actually worked (or didn't)
+            # on this search gets recorded, so unverified guesses turn into
+            # verified facts, or wrong guesses get flagged, without you
+            # having to manually check.
+            if gh_meta or ab_meta:
+                for token in gh_meta.get("boards_checked", []):
+                    registry_rows = record_discovery(registry_rows, token, "greenhouse", found=True)
+                for token in gh_meta.get("boards_failed", []):
+                    registry_rows = record_discovery(registry_rows, token, "greenhouse", found=False)
+                for token in ab_meta.get("boards_checked", []):
+                    registry_rows = record_discovery(registry_rows, token, "ashby", found=True)
+                for token in ab_meta.get("boards_failed", []):
+                    registry_rows = record_discovery(registry_rows, token, "ashby", found=False)
+                st.session_state.company_registry = registry_rows
+                save_registry(registry_rows)
 
             if search_meta.get("broadened"):
                 note = f"No Remotive listings matched \"{search_meta['original_query']}\" with the current filters, so I broadened that search"
@@ -344,6 +398,19 @@ with tab_deep_dive:
                     # hand the panel, and only fall back to whatever the search result
                     # already had if that fails.
                     salary = extract_salary(job_text) or target_job.get("salary", "")
+
+                    # Some ATSes (Greenhouse in particular) render the salary line via
+                    # their own compliance template rather than the employer-authored
+                    # description the API returns, so it can be genuinely absent from
+                    # a cached search result's description even though it's visible on
+                    # the live page. If we still don't have a salary and this came from
+                    # a search result (not a fresh fetch already), try the live page once.
+                    if not salary and target_job.get("url") and target_job.get("description"):
+                        try:
+                            live_text = fetch_job_text(target_job["url"])
+                            salary = extract_salary(live_text)
+                        except Exception:
+                            pass
 
                     result = run_panel(
                         resume_text=resume_text,
@@ -483,8 +550,6 @@ with tab_deep_dive:
                         top_gaps=result.top_gaps,
                         resume_fixes=result.resume_fixes,
                         api_key=api_key,
-                        portfolio_url=portfolio_url,
-                        github_url=github_url,
                     )
                     st.session_state.tailored_materials = materials
                 except Exception as e:
@@ -499,10 +564,17 @@ with tab_deep_dive:
                 st.write(f"- {change}")
             if materials.get("keywords_emphasized"):
                 st.caption("Keywords emphasized: " + ", ".join(materials["keywords_emphasized"]))
+            if materials.get("core_competencies"):
+                st.caption("Core competencies (rendered as tags on the resume): " + " · ".join(materials["core_competencies"]))
 
             with st.expander("Preview tailored resume (Markdown)"):
                 st.markdown(materials["tailored_resume_markdown"])
             with st.expander("Preview cover letter"):
+                word_count = len(materials["cover_letter"].split())
+                if word_count > 280:
+                    st.warning(f"{word_count} words — over the 280-word target. Consider regenerating.")
+                else:
+                    st.caption(f"{word_count} words")
                 st.write(materials["cover_letter"])
 
             if st.button("Render PDFs"):
@@ -516,10 +588,23 @@ with tab_deep_dive:
                             tempfile.gettempdir(), f"cover_letter_{safe_company}.pdf"
                         )
                         render_resume_pdf(
-                            materials["tailored_resume_markdown"], resume_pdf_path, location=result.location
+                            materials["tailored_resume_markdown"],
+                            resume_pdf_path,
+                            location=result.location,
+                            linkedin_url=linkedin_url,
+                            portfolio_url=portfolio_url,
+                            github_url=github_url,
+                            core_competencies=materials.get("core_competencies", []),
                         )
                         render_cover_letter_pdf(
-                            materials["cover_letter"], cover_pdf_path, location=result.location
+                            materials["cover_letter"],
+                            cover_pdf_path,
+                            location=result.location,
+                            candidate_name=materials.get("candidate_name", ""),
+                            candidate_tagline=materials.get("candidate_tagline", ""),
+                            linkedin_url=linkedin_url,
+                            portfolio_url=portfolio_url,
+                            github_url=github_url,
                         )
 
                         with open(resume_pdf_path, "rb") as f:

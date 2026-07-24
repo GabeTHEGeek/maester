@@ -47,14 +47,27 @@ to prep for, and the same legitimacy/comp checks at panel-level depth.
 in the panel's own findings: reorders and rewords your existing bullets,
 detects which of six PM archetypes the role fits and foregrounds the matching
 experience, weaves in the JD's own terminology where honestly applicable, and
-opens the cover letter with a real project parallel when one genuinely exists.
-Hard rule, enforced in the prompt: never invents experience, employers, dates,
-or metrics not already in your resume. The cover letter always opens with
-"Dear Hiring Manager," caps em dash use at one per letter, avoids AI-sounding
-stock phrases ("leverage," "proven track record," "results-oriented," etc.),
-and includes your portfolio/GitHub links in the signature if you've entered
-them in the sidebar. Renders to clean, single-column, ATS-safe PDFs
-(region-aware — Letter for US/Canada, A4 elsewhere).
+generates a Core Competencies tag section pulled from what's actually in your
+resume. Hard rule, enforced in the prompt and backed by code-level checks, not
+just instructions: never invents experience, employers, dates, or metrics not
+already in your resume.
+
+The resume PDF has a centered header with hyperlinked LinkedIn/portfolio/
+GitHub links (whichever you've filled in the sidebar), employment dates
+right-aligned against each role the way most resume templates do it, and
+11pt body text throughout.
+
+The cover letter opens with a real project parallel when one genuinely
+exists, always opens with "Dear Hiring Manager," and is capped hard: 3
+paragraphs, 4 sentences per paragraph, 280 words total, zero em dashes
+anywhere. If a first draft comes back over the word limit, the app
+automatically asks the model to condense it rather than trusting the first
+pass. The letterhead includes your name, a short role tagline, today's date,
+and the same hyperlinked links as the resume; it signs off with "Best
+regards," and your name, no footer, no links repeated in the body.
+
+Both render to clean, single-column, ATS-safe PDFs (region-aware — Letter for
+US/Canada, A4 elsewhere).
 
 **4. Email notifications** — optional. Enter your own email and an app
 password (Gmail requires an App Password, not your regular one) in the
@@ -90,6 +103,45 @@ streamlit run app.py
 Or paste your API key directly into the sidebar at runtime — it's never
 written to disk.
 
+## Running on a schedule
+
+The Streamlit app is interactive, but the search/dedup/scoring pipeline
+underneath it can run headless via `scheduled_scan.py`, the same modules,
+just without a UI. It reads which queries to run from `scan_config.json`,
+skips anything already in your scan history, and — only if you've set SMTP
+credentials — emails you a digest, but only when something actually clears
+your grade threshold. A routine run that finds nothing new sends nothing.
+
+```bash
+cp .env.example .env    # fill in your real API key and (optional) SMTP creds
+python scheduled_scan.py
+```
+
+Edit `scan_config.json` to change what it searches for:
+```json
+{
+  "queries": ["AI product manager", "technical product manager AI"],
+  "sources": ["remotive", "greenhouse", "ashby"],
+  "min_grade": "B",
+  "results_per_query": 15
+}
+```
+
+**To actually run it on a schedule** (macOS/Linux, via cron):
+```bash
+crontab -e
+```
+Add a line like this to run it every morning at 8am (adjust paths to match your setup):
+```
+0 8 * * * cd /path/to/maester && /path/to/maester/venv/bin/python scheduled_scan.py >> scan.log 2>&1
+```
+Cron runs with a minimal environment, so credentials need to come from `.env`
+(loaded automatically via `python-dotenv`) rather than variables you've only
+exported in your regular shell.
+
+On Windows, use Task Scheduler with the same command, pointed at your venv's
+`python.exe`.
+
 ## Your resume
 
 `sample_data/resume.md` is gitignored on purpose — it's meant to hold your
@@ -105,8 +157,10 @@ If you fork this repo, double-check `git ls-files | grep resume` only shows
 - No auto-apply — every application is your call, nothing gets submitted
 - No invented experience, employers, or metrics — the tailoring prompt is
   built around this as a hard rule, not a suggestion
-- No auto-email by default — summary emails only send if you explicitly
-  enable auto-send or click "send now"
+- No auto-email unless you opt in — the app only sends if you enable
+  auto-send or click "send now"; the scheduled script only sends if you've
+  set SMTP credentials in `.env` and only when a listing actually clears your
+  grade threshold
 - No cloud storage — the tracker and scan history are both local CSVs;
   nothing leaves your machine except what you send to the Anthropic API (and,
   if you opt in, your own SMTP server for email summaries)

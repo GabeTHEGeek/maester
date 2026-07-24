@@ -35,6 +35,7 @@ DEFAULT_BOARDS = [
     "perplexityai",
     "webflow",
     "vercel",
+    "mercury",
 ]
 
 

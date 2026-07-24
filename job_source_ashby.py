@@ -25,7 +25,6 @@ DEFAULT_BOARDS = [
     "linear",
     "notion",
     "retool",
-    "mercury",
     "replit",
     "watershed",
     "runway",
