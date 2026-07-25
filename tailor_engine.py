@@ -83,12 +83,30 @@ the source resume actually has. Keep the same structure (same headers, same
 roles, same companies, same dates) and the same overall length — this is a
 reordering and rewording pass, not a rewrite.
 
+TENURE VS. MILESTONE TIMEFRAMES: a bullet may state how quickly a milestone
+was hit early in a role (e.g., "achieved zero paid marketing spend in first
+4 months"). That describes how fast something was accomplished, not how long
+the candidate has held the role — always use the role's own stated date
+range for tenure or experience length, never a milestone timeframe mentioned
+inside a bullet. Do not reword a bullet in a way that would make this
+ambiguous or imply the role itself only lasted that long.
+
 Do NOT add a "Core Competencies," "Skills," or similarly named section to
 tailored_resume_markdown itself, even though the resume may not have one.
 Competencies are handled entirely through the separate core_competencies field
 below and rendered as their own visual section by the document layout — adding
 one into the markdown body as well produces a duplicate section in the final
 document.
+
+If the source resume's Summary section opens with a standalone one-line
+title/headline (e.g. "Senior Product Manager | AI Products | Founder" as its
+own line, separate from the descriptive paragraph below it), DROP that line
+entirely from tailored_resume_markdown. The candidate_tagline field below
+already renders as a headline above the Summary section — keeping a second,
+near-duplicate headline line as the first line of the Summary content itself
+produces two nearly identical lines stacked on top of each other in the final
+document. The Summary section should start directly with the descriptive
+paragraph.
 
 Also produce CORE COMPETENCIES: 6-9 short phrases (2-4 words each, e.g.
 "Agentic Workflow Design," "0-to-1 Marketplace Building") pulled from what's
@@ -272,6 +290,9 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         data["tailored_resume_markdown"] = _strip_duplicate_competencies_section(
             data["tailored_resume_markdown"]
         )
+        data["tailored_resume_markdown"] = _strip_duplicate_summary_headline(
+            data["tailored_resume_markdown"]
+        )
 
     if "cover_letter" in data:
         data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
@@ -296,6 +317,24 @@ def _strip_duplicate_competencies_section(markdown_text: str) -> str:
     as pills), but a model instruction is not a guarantee — this removes
     one if it slips through, so it never renders twice."""
     return _COMPETENCY_SECTION_RE.sub("", "\n" + markdown_text).strip()
+
+
+_SUMMARY_HEADLINE_RE = re.compile(
+    r"(##\s*Summary)\s*\n+[ \t]*([^\n]{1,140}\|[^\n]{1,140})\s*\n+",
+    re.IGNORECASE,
+)
+
+
+def _strip_duplicate_summary_headline(markdown_text: str) -> str:
+    """Hard backstop: the prompt instructs the model to drop a standalone
+    pipe-delimited title line from the top of the Summary section (since
+    candidate_tagline already renders as a headline right above it), but
+    that's a request, not a guarantee — this strips one if it slips through,
+    so the resume never shows two near-identical headlines stacked on top
+    of each other."""
+    def repl(match):
+        return f"{match.group(1)}\n\n"
+    return _SUMMARY_HEADLINE_RE.sub(repl, markdown_text, count=1)
 
 
 def _condense_cover_letter(cover_letter: str, client: "anthropic.Anthropic", model: str) -> str:

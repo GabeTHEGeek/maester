@@ -29,6 +29,7 @@ FIELDS = [
     "legitimacy_tier",
     "legitimacy_note",
     "comp_reliability",
+    "published",
     "last_scanned",
 ]
 
@@ -82,6 +83,7 @@ def record_scans(quick_scores: list) -> None:
                     "legitimacy_tier": r.legitimacy_tier,
                     "legitimacy_note": r.legitimacy_note,
                     "comp_reliability": r.comp_reliability,
+                    "published": r.published,
                     "last_scanned": now,
                 }
             )

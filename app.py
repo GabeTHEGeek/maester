@@ -20,7 +20,8 @@ import job_source_lever
 from company_registry import add_company, load_registry, record_discovery, save_registry, tokens_for_platform
 from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
-from extract import extract_salary
+from extract import extract_salary, format_published_date
+from freshness import compute_freshness
 from fetch_job import check_liveness, fetch_job_page, fetch_job_text
 from job_source import search_jobs
 from panel_engine import run_panel
@@ -424,7 +425,15 @@ with tab_search:
                     if r.salary:
                         comp_suffix = f" (reliability: {r.comp_reliability})" if r.comp_reliability else ""
                         meta_bits.append(f"{r.salary}{comp_suffix}")
-                    st.markdown(f"**{r.title}** — {r.company}")
+
+                    published_display = format_published_date(r.published)
+                    freshness = compute_freshness(r.published, r.title)
+                    title_line = f"**{r.title}** — {r.company}"
+                    if published_display:
+                        freshness_prefix = f"{freshness['emoji']} {freshness['label']} · " if freshness["label"] else ""
+                        title_line += f"  &nbsp;&nbsp;:gray[{freshness_prefix}posted {published_display}]"
+
+                    st.markdown(title_line)
                     st.caption(f"{r.reason}  \n:gray[{' · '.join(meta_bits)}]")
                     if r.legitimacy_tier and r.legitimacy_tier != "High Confidence":
                         legit_color = "red" if r.legitimacy_tier == "Suspicious" else "orange"
@@ -484,11 +493,18 @@ with tab_deep_dive:
                     # description the API returns, so it can be genuinely absent from
                     # a cached search result's description even though it's visible on
                     # the live page. If we still don't have a salary and this came from
-                    # a search result (not a fresh fetch already), try the live page once.
+                    # a search result (not a fresh fetch already), try the live page once —
+                    # and replace job_text itself with the fuller live version, not just
+                    # the extracted salary string, so the panel's own Comp Reliability
+                    # reasoning sees the same salary text the regex found, instead of the
+                    # two disagreeing because only one of them got the live page's content.
                     if not salary and target_job.get("url") and target_job.get("description"):
                         try:
                             live_text = fetch_job_text(target_job["url"])
-                            salary = extract_salary(live_text)
+                            live_salary = extract_salary(live_text)
+                            if live_salary:
+                                salary = live_salary
+                                job_text = live_text
                         except Exception:
                             pass
 

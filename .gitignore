@@ -9,4 +9,3 @@ PROJECT_SUMMARY.md
 .streamlit/secrets.toml
 venv/
 sample_data/resume.md
-.DS_Store

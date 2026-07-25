@@ -39,8 +39,16 @@ result instead of burning another API call on something you already have an
 answer for. New listings get a fast, cheap rubric score (Haiku) plus a
 Posting Legitimacy read (does this look like a real, active opening) and a
 Compensation Reliability read (does the advertised number look like real base
-pay or inflated OTE), with salary and location extracted wherever the source
-states them.
+pay or inflated OTE), with salary, location, and posting date extracted
+wherever the source states them (shown as "posted 3 days ago" style relative
+dates; Gem doesn't expose a posting date at all, so that field is just
+blank there rather than guessed). Each posting date also gets a seniority-
+scaled freshness tag (🔥🔥 Hot, 🔥 Good, 🔵 Normal, 🕒 Aging, 🟡 Possibly Stale,
+🥶 Stale) — a 60-day-old Senior or Director posting is normal, since those
+searches run longer, while the same age on a Junior/Associate posting is a
+real staleness signal. Seniority is inferred from title keywords with "Mid"
+as the default when there's no clear signal, and this is informational only,
+never folded into the fit score.
 
 **2. Deep Dive** — on any listing worth a closer look, a full five-perspective
 panel (Sonnet) runs, citing specific sections of your resume, and returns a

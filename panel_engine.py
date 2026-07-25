@@ -40,6 +40,17 @@ Score overall fit on this scale:
 Be brutally honest. Never inflate the score to be encouraging. Distinguish between
 real gaps (missing experience) and presentation gaps (has it, resume hides it).
 
+TENURE VS. MILESTONE TIMEFRAMES — do not confuse these. A bullet may state how
+quickly a milestone was hit within a role (e.g., "achieved zero paid marketing
+spend in first 4 months," "hit 10 partnerships in the first quarter"). That
+number describes how fast something was accomplished early in the role, NOT
+how long the candidate has held that role. Always use the role's own stated
+date range (e.g., "November 2024 – Present") for how long someone has been
+doing a job or how much experience they have in it. Never reason as if a
+candidate has "only 4 months of experience" just because a bullet under that
+role mentions a 4-month milestone — check the actual date range every time
+before making any claim about tenure or experience length.
+
 CANDIDATE'S AI PROFILE — apply this precisely, don't blur it: the candidate's AI
 experience is applied AI / LLM product engineering — prompt engineering for
 structured output, multi-model orchestration, agentic workflow architecture, API

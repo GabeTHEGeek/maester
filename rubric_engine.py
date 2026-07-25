@@ -89,6 +89,7 @@ class QuickScore:
     legitimacy_tier: str = ""
     legitimacy_note: str = ""
     comp_reliability: str = ""
+    published: str = ""
 
 
 def _extract_json(text: str) -> dict:
@@ -130,6 +131,7 @@ Description: {job['description']}
         source=job.get("source", "unknown"),
         board=job.get("board", "unknown"),
         location=job.get("location", ""),
+        published=job.get("published", ""),
         salary=job.get("salary", ""),
         legitimacy_tier=data.get("legitimacy_tier", ""),
         legitimacy_note=data.get("legitimacy_note", ""),
@@ -160,6 +162,7 @@ def batch_score(resume_text: str, jobs: list[dict], api_key: str, max_workers: i
                         source=job.get("source", "unknown"),
                         board=job.get("board", "unknown"),
                         location=job.get("location", ""),
+                        published=job.get("published", ""),
                         salary=job.get("salary", ""),
                     )
                 )
@@ -185,4 +188,5 @@ def quick_score_from_cache(row: dict, job_id: str) -> QuickScore:
         legitimacy_tier=row.get("legitimacy_tier", ""),
         legitimacy_note=row.get("legitimacy_note", ""),
         comp_reliability=row.get("comp_reliability", ""),
+        published=row.get("published", ""),
     )
