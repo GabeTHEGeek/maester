@@ -22,10 +22,14 @@ pipeline at a glance.
 
 ## How it works
 
-**1. Search & Score** — pulls live listings from three sources: Remotive (broad
-job board), Greenhouse, and Ashby (both direct per-company boards —
-configurable list of companies for each, fetched in parallel so checking a
-dozen companies doesn't mean waiting on a dozen sequential API calls). A title
+**1. Search & Score** — pulls live listings from five sources: Remotive (broad
+job board) plus Greenhouse, Ashby, Gem, and Lever (all direct per-company
+boards — configurable list of companies for each, fetched in parallel so
+checking a dozen companies doesn't mean waiting on a dozen sequential API
+calls). Company platform assignments live in a user-editable, self-correcting
+registry: entries start as "unverified" guesses (or come pre-seeded from
+real third-party ATS directories) and automatically flip to "verified," or
+get flagged as wrong, based on what an actual search finds. A title
 allowlist/blocklist filters out the noise these APIs are prone to (a "product
 manager" search returning "Accounts Payable Assistant" because the word
 "product" appears somewhere in the description). Every listing you've already
@@ -41,7 +45,11 @@ states them.
 **2. Deep Dive** — on any listing worth a closer look, a full five-perspective
 panel (Sonnet) runs, citing specific sections of your resume, and returns a
 fit score, tier, recommendation, top gaps, resume fixes, interview questions
-to prep for, and the same legitimacy/comp checks at panel-level depth.
+to prep for, and the same legitimacy/comp checks at panel-level depth. For
+manually-pasted URLs, a best-effort liveness check flags postings that look
+closed (redirected to an error page, "no longer accepting applications"
+language, suspiciously thin content) before you trust the evaluation — a
+signal to check, not a hard block, since the heuristic isn't definitive.
 
 **3. Tailor & Export** — generates a tailored resume and cover letter grounded
 in the panel's own findings: reorders and rewords your existing bullets,
@@ -84,7 +92,7 @@ changes what's tracked.
 - **Streamlit** — UI
 - **Anthropic API (Claude)** — Haiku for the fast triage pass, Sonnet for the
   deep-dive panel and tailoring
-- **Remotive + Greenhouse + Ashby APIs** — live job search, no scraping
+- **Remotive + Greenhouse + Ashby + Gem + Lever APIs** — live job search, no scraping
 - **requests + BeautifulSoup** — fallback JD extraction for pasted URLs
 - **reportlab** — ATS-safe PDF rendering (single-column, standard fonts, no
   tables/images that trip parsers)
@@ -102,45 +110,6 @@ streamlit run app.py
 
 Or paste your API key directly into the sidebar at runtime — it's never
 written to disk.
-
-## Running on a schedule
-
-The Streamlit app is interactive, but the search/dedup/scoring pipeline
-underneath it can run headless via `scheduled_scan.py`, the same modules,
-just without a UI. It reads which queries to run from `scan_config.json`,
-skips anything already in your scan history, and — only if you've set SMTP
-credentials — emails you a digest, but only when something actually clears
-your grade threshold. A routine run that finds nothing new sends nothing.
-
-```bash
-cp .env.example .env    # fill in your real API key and (optional) SMTP creds
-python scheduled_scan.py
-```
-
-Edit `scan_config.json` to change what it searches for:
-```json
-{
-  "queries": ["AI product manager", "technical product manager AI"],
-  "sources": ["remotive", "greenhouse", "ashby"],
-  "min_grade": "B",
-  "results_per_query": 15
-}
-```
-
-**To actually run it on a schedule** (macOS/Linux, via cron):
-```bash
-crontab -e
-```
-Add a line like this to run it every morning at 8am (adjust paths to match your setup):
-```
-0 8 * * * cd /path/to/maester && /path/to/maester/venv/bin/python scheduled_scan.py >> scan.log 2>&1
-```
-Cron runs with a minimal environment, so credentials need to come from `.env`
-(loaded automatically via `python-dotenv`) rather than variables you've only
-exported in your regular shell.
-
-On Windows, use Task Scheduler with the same command, pointed at your venv's
-`python.exe`.
 
 ## Your resume
 
@@ -167,10 +136,11 @@ If you fork this repo, double-check `git ls-files | grep resume` only shows
 
 ## Roadmap
 
-- [ ] Lever as a fourth job source, for companies not on Remotive/Greenhouse/Ashby
 - [ ] SQLite instead of CSV once the tracker needs querying, not just viewing
-- [ ] Posting liveness check (flag closed/stale listings before scoring them)
 - [ ] Cost tracking per session (rough token spend estimate)
+- [ ] Cross-listing detection: fingerprint job description text to catch the
+      same role posted by both the direct employer and a recruitment agency
+      under a different name (a real feature in career-ops, not yet built here)
 
 ## License
 

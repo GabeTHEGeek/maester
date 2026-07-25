@@ -108,6 +108,7 @@ def search_greenhouse(
             continue
         boards_checked.append(board)
 
+        board_job_count = 0
         for job in raw_jobs:
             title = job.get("title", "")
             title_lower = title.lower()
@@ -164,9 +165,14 @@ def search_greenhouse(
                     "board": board,
                 }
             )
-            if len(jobs) >= limit:
+            board_job_count += 1
+            # Per-board cap, not a shared global one — a global cap meant
+            # companies later in iteration order could get zero results
+            # purely from bad luck in list ordering, even with plenty of
+            # relevant openings. Each board gets its own fair shot up to
+            # `limit`, so more companies selected means more total results,
+            # not fewer per company.
+            if board_job_count >= limit:
                 break
-        if len(jobs) >= limit:
-            break
 
     return jobs, {"boards_checked": boards_checked, "boards_failed": boards_failed}

@@ -5,6 +5,8 @@ tracker.csv
 tracker_old.csv
 scan_history.csv
 scan_history_old.csv
+PROJECT_SUMMARY.md
 .streamlit/secrets.toml
 venv/
 sample_data/resume.md
+.DS_Store

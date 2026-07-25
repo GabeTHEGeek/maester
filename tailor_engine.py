@@ -74,9 +74,14 @@ actually did.
 TASK 1 — Tailored resume: take the resume Markdown and produce a revised
 version. Reorder bullets within a role so the most relevant appear first,
 reword bullets to use the JD's terminology where truthfully applicable, adjust
-the summary/headline to foreground the detected archetype. Keep the same
-structure (same headers, same roles, same companies, same dates) and the same
-overall length — this is a reordering and rewording pass, not a rewrite.
+the summary/headline to foreground the detected archetype. The summary should
+lead with the candidate's strongest concrete numbers already present in the
+resume (retention/conversion percentages, dollar amounts, team size, scale)
+rather than descriptive adjectives — "led a team that grew retention 27%"
+beats "experienced leader focused on growth," using whatever specific figures
+the source resume actually has. Keep the same structure (same headers, same
+roles, same companies, same dates) and the same overall length — this is a
+reordering and rewording pass, not a rewrite.
 
 Do NOT add a "Core Competencies," "Skills," or similarly named section to
 tailored_resume_markdown itself, even though the resume may not have one.

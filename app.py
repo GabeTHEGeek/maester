@@ -14,12 +14,14 @@ import streamlit as st
 
 import job_source
 import job_source_ashby
+import job_source_gem
 import job_source_greenhouse
+import job_source_lever
 from company_registry import add_company, load_registry, record_discovery, save_registry, tokens_for_platform
 from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
 from extract import extract_salary
-from fetch_job import fetch_job_text
+from fetch_job import check_liveness, fetch_job_page, fetch_job_text
 from job_source import search_jobs
 from panel_engine import run_panel
 from pdf_export import render_cover_letter_pdf, render_resume_pdf
@@ -117,14 +119,23 @@ with tab_search:
             placeholder="e.g. AI product manager",
         )
     with col2:
-        limit = st.number_input("Max results", min_value=5, max_value=30, value=15)
+        limit = st.number_input(
+            "Max results per company/source",
+            min_value=5,
+            max_value=50,
+            value=15,
+            help="Applies per company (Greenhouse/Ashby) or per source (Remotive), not as a shared total — "
+            "selecting more companies means more total results, not fewer per company. Most companies have "
+            "far fewer than 15 open PM-shaped roles at once, so raising this rarely changes results for "
+            "Greenhouse/Ashby; it matters more for Remotive's broader search.",
+        )
 
     with st.expander("Search filters"):
         sources = st.multiselect(
             "Search sources",
-            options=["Remotive", "Greenhouse", "Ashby"],
-            default=["Remotive", "Greenhouse", "Ashby"],
-            help="Remotive is a broad job board (full-text matched). Greenhouse and Ashby pull directly from specific companies' own job boards (title-matched, no full-text noise).",
+            options=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
+            default=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
+            help="Remotive is a broad job board (full-text matched). Greenhouse, Ashby, Gem, and Lever pull directly from specific companies' own job boards (title-matched, no full-text noise).",
         )
         if "company_registry" not in st.session_state:
             st.session_state.company_registry = load_registry()
@@ -132,25 +143,39 @@ with tab_search:
 
         gh_registry_tokens = tokens_for_platform(registry_rows, "greenhouse")
         ab_registry_tokens = tokens_for_platform(registry_rows, "ashby")
+        gem_registry_tokens = tokens_for_platform(registry_rows, "gem")
+        lever_registry_tokens = tokens_for_platform(registry_rows, "lever")
 
         greenhouse_boards = st.multiselect(
             "Greenhouse companies to check",
             options=gh_registry_tokens,
             default=gh_registry_tokens,
-            help="Includes companies marked 'unknown' platform too — those get tried here and on Ashby, and the registry below records whichever one actually works.",
+            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works.",
         )
         ashby_boards = st.multiselect(
             "Ashby companies to check",
             options=ab_registry_tokens,
             default=ab_registry_tokens,
-            help="Includes companies marked 'unknown' platform too — those get tried here and on Greenhouse, and the registry below records whichever one actually works.",
+            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works.",
+        )
+        gem_boards = st.multiselect(
+            "Gem companies to check",
+            options=gem_registry_tokens,
+            default=gem_registry_tokens,
+            help="Gem's API returns listings quickly but not full descriptions — matching jobs get an extra page fetch for the real JD text, so this is a bit slower per match than Greenhouse/Ashby.",
+        )
+        lever_boards = st.multiselect(
+            "Lever companies to check",
+            options=lever_registry_tokens,
+            default=lever_registry_tokens,
+            help="Lever doesn't publish a customer list, so these tokens are only as good as whoever last verified them — wrong or stale tokens will just show up as a failed board below.",
         )
 
         with st.expander("Manage companies (add, edit, verify)"):
             st.caption(
                 "Edit directly — add a row, fix a wrong platform, or add notes. "
-                "'verified' means confirmed by a real search hit; 'unverified' is a guess; "
-                "'unknown' platform gets tried on both Greenhouse and Ashby until discovered."
+                "'verified' means confirmed by a real search hit or your own direct knowledge; "
+                "'unverified' is a guess; 'unknown' platform gets tried across all three platforms until discovered."
             )
             edited_rows = st.data_editor(
                 registry_rows,
@@ -158,7 +183,7 @@ with tab_search:
                 use_container_width=True,
                 column_config={
                     "platform": st.column_config.SelectboxColumn(
-                        options=["greenhouse", "ashby", "unknown"]
+                        options=["greenhouse", "ashby", "gem", "lever", "unknown"]
                     ),
                     "status": st.column_config.SelectboxColumn(
                         options=["verified", "unverified", "failed"]
@@ -204,6 +229,8 @@ with tab_search:
             search_meta = {}
             gh_meta = {}
             ab_meta = {}
+            gem_meta = {}
+            lever_meta = {}
 
             if "Remotive" in sources:
                 with st.spinner(f"Searching Remotive for '{query}'..."):
@@ -257,11 +284,49 @@ with tab_search:
                     except Exception as e:
                         st.error(f"Ashby search failed: {e}")
 
+            if "Gem" in sources:
+                with st.spinner(f"Checking {len(gem_boards)} Gem boards for '{query}'..."):
+                    try:
+                        gem_jobs, gem_meta = job_source_gem.search_gem(
+                            query,
+                            boards=gem_boards,
+                            limit=int(limit),
+                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
+                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                        )
+                        jobs.extend(gem_jobs)
+                        if gem_meta.get("boards_failed"):
+                            st.caption(
+                                f"Gem boards that returned nothing (dead token or no matches): "
+                                f"{', '.join(gem_meta['boards_failed'])}"
+                            )
+                    except Exception as e:
+                        st.error(f"Gem search failed: {e}")
+
+            if "Lever" in sources:
+                with st.spinner(f"Checking {len(lever_boards)} Lever boards for '{query}'..."):
+                    try:
+                        lever_jobs, lever_meta = job_source_lever.search_lever(
+                            query,
+                            boards=lever_boards,
+                            limit=int(limit),
+                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
+                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                        )
+                        jobs.extend(lever_jobs)
+                        if lever_meta.get("boards_failed"):
+                            st.caption(
+                                f"Lever boards that returned nothing (dead token or no matches): "
+                                f"{', '.join(lever_meta['boards_failed'])}"
+                            )
+                    except Exception as e:
+                        st.error(f"Lever search failed: {e}")
+
             # Self-correcting registry: whatever actually worked (or didn't)
             # on this search gets recorded, so unverified guesses turn into
             # verified facts, or wrong guesses get flagged, without you
             # having to manually check.
-            if gh_meta or ab_meta:
+            if gh_meta or ab_meta or gem_meta or lever_meta:
                 for token in gh_meta.get("boards_checked", []):
                     registry_rows = record_discovery(registry_rows, token, "greenhouse", found=True)
                 for token in gh_meta.get("boards_failed", []):
@@ -270,6 +335,14 @@ with tab_search:
                     registry_rows = record_discovery(registry_rows, token, "ashby", found=True)
                 for token in ab_meta.get("boards_failed", []):
                     registry_rows = record_discovery(registry_rows, token, "ashby", found=False)
+                for token in gem_meta.get("boards_checked", []):
+                    registry_rows = record_discovery(registry_rows, token, "gem", found=True)
+                for token in gem_meta.get("boards_failed", []):
+                    registry_rows = record_discovery(registry_rows, token, "gem", found=False)
+                for token in lever_meta.get("boards_checked", []):
+                    registry_rows = record_discovery(registry_rows, token, "lever", found=True)
+                for token in lever_meta.get("boards_failed", []):
+                    registry_rows = record_discovery(registry_rows, token, "lever", found=False)
                 st.session_state.company_registry = registry_rows
                 save_registry(registry_rows)
 
@@ -339,6 +412,10 @@ with tab_search:
                         source_label = f"Greenhouse · {r.board}"
                     elif r.source == "ashby":
                         source_label = f"Ashby · {r.board}"
+                    elif r.source == "gem":
+                        source_label = f"Gem · {r.board}"
+                    elif r.source == "lever":
+                        source_label = f"Lever · {r.board}"
                     else:
                         source_label = "Remotive"
                     meta_bits = [source_label]
@@ -388,10 +465,13 @@ with tab_deep_dive:
         else:
             with st.spinner("Fetching listing and convening the panel..."):
                 try:
+                    liveness = None
                     if target_job.get("description"):
                         job_text = target_job["description"]
                     else:
-                        job_text = fetch_job_text(target_job["url"])
+                        page = fetch_job_page(target_job["url"])
+                        job_text = page["text"]
+                        liveness = check_liveness(job_text, page["final_url"])
 
                     # Manually pasted URLs never go through job_source's extraction,
                     # so always try extracting from the actual text we're about to
@@ -429,6 +509,7 @@ with tab_deep_dive:
                     # it triggers, independent of when the panel was actually run.
                     st.session_state.deep_dive_result = result
                     st.session_state.deep_dive_job_text = job_text
+                    st.session_state.deep_dive_liveness = liveness
                     st.session_state.tailored_materials = None
 
                     if auto_email and smtp_email and smtp_password:
@@ -457,6 +538,12 @@ with tab_deep_dive:
             "Stretch": "orange",
             "Poor fit": "red",
         }.get(result.tier, "gray")
+
+        liveness = st.session_state.get("deep_dive_liveness")
+        if liveness and liveness["status"] == "expired":
+            st.error(f"⚠ This posting may no longer be active. {liveness['reason']} The evaluation below is still shown, but check the listing directly before acting on it.")
+        elif liveness and liveness["status"] == "unknown":
+            st.warning(f"⚠ Couldn't confirm this posting is still active. {liveness['reason']}")
 
         st.markdown(f"## Fit score: {result.fit_score}/100 — :{tier_color}[{result.tier}]")
         st.write(result.tier_reason)
@@ -601,7 +688,6 @@ with tab_deep_dive:
                             cover_pdf_path,
                             location=result.location,
                             candidate_name=materials.get("candidate_name", ""),
-                            candidate_tagline=materials.get("candidate_tagline", ""),
                             linkedin_url=linkedin_url,
                             portfolio_url=portfolio_url,
                             github_url=github_url,

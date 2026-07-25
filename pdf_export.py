@@ -226,6 +226,7 @@ def render_resume_pdf(
     markdown_text: str,
     output_path: str,
     location: str = "",
+    candidate_tagline: str = "",
     linkedin_url: str = "",
     portfolio_url: str = "",
     github_url: str = "",
@@ -295,6 +296,8 @@ def render_resume_pdf(
                 competencies_injected = True
             if header_text.lower() == "summary":
                 summary_seen = True
+                if candidate_tagline:
+                    story.append(Paragraph(_inline_markdown_to_reportlab(candidate_tagline), _TAGLINE_STYLE))
             story.append(Paragraph(header_text.upper(), _SECTION_STYLE))
             i += 1
         elif stripped.startswith("### "):

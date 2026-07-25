@@ -106,6 +106,7 @@ def search_ashby(
             continue
         boards_checked.append(board)
 
+        board_job_count = 0
         for job in raw_jobs:
             title = job.get("title", "")
             title_lower = title.lower()
@@ -140,9 +141,10 @@ def search_ashby(
                     "board": board,
                 }
             )
-            if len(jobs) >= limit:
+            board_job_count += 1
+            # Per-board cap, not shared globally — see job_source_greenhouse.py
+            # for why: a global cap starves companies later in iteration order.
+            if board_job_count >= limit:
                 break
-        if len(jobs) >= limit:
-            break
 
     return jobs, {"boards_checked": boards_checked, "boards_failed": boards_failed}
