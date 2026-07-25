@@ -1,34 +1,38 @@
 company,token,platform,status,last_checked,notes
-Anthropic,anthropic,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Airtable,airtable,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Mercury,mercury,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-OpenAI,openai,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Databricks,databricks,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Notion,notion,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Ramp,ramp,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Scale AI,scaleai,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Perplexity,perplexityai,ashby,verified,2026-07-25T14:11:13,Confirmed by user
-Webflow,webflow,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Vercel,vercel,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Linear,linear,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Retool,retool,gem,verified,2026-07-25T14:11:13,Auto-discovered
-Replit,replit,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Watershed,watershed,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Runway,runway,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Figma,figma,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Cursor,cursor,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Brex,brex,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Reddit,reddit,greenhouse,verified,2026-07-25T14:11:13,Auto-discovered
-Shopify,shopify,lever,unverified,2026-07-25T14:11:13,"Ruled out on both Ashby and Greenhouse directories, then found in a real Lever company directory — resolves the earlier unknown, pending verification by an actual Maester search; Not found on lever"
-Plaid,plaid,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Supabase,supabase,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-PostHog,posthog,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Cohere,cohere,ashby,verified,2026-07-25T14:11:13,Auto-discovered
-Twitch,twitch,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
-Weights & Biases,wandb,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
-Anyscale,anyscale,lever,verified,2026-07-25T14:11:13,Auto-discovered
-Abridge,abridge,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
-Toptal,toptal,lever,verified,2026-07-25T14:11:13,Auto-discovered
-Upwork,upwork,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
-Atlassian,atlassian,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
-Wiz,wiz,lever,unverified,2026-07-25T14:11:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Anthropic,anthropic,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Airtable,airtable,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Mercury,mercury,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+OpenAI,openai,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+Databricks,databricks,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Notion,notion,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Ramp,ramp,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Scale AI,scaleai,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Perplexity,perplexityai,ashby,verified,2026-07-25T14:21:13,Confirmed by user
+Webflow,webflow,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Vercel,vercel,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Linear,linear,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Retool,retool,gem,verified,2026-07-25T16:03:21,Auto-discovered
+Replit,replit,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Watershed,watershed,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Runway,runway,ashby,verified,2026-07-25T16:03:21,Auto-discovered
+Figma,figma,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Cursor,cursor,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+Brex,brex,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Reddit,reddit,greenhouse,verified,2026-07-25T14:21:13,Auto-discovered
+Shopify,shopify,lever,unverified,2026-07-25T14:21:13,"Ruled out on both Ashby and Greenhouse directories, then found in a real Lever company directory — resolves the earlier unknown, pending verification by an actual Maester search; Not found on lever"
+Plaid,plaid,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+Supabase,supabase,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+PostHog,posthog,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+Cohere,cohere,ashby,verified,2026-07-25T14:21:13,Auto-discovered
+Twitch,twitch,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Weights & Biases,wandb,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Anyscale,anyscale,lever,verified,2026-07-25T14:21:13,Auto-discovered
+Abridge,abridge,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Toptal,toptal,lever,verified,2026-07-25T14:21:13,Auto-discovered
+Upwork,upwork,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Atlassian,atlassian,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Wiz,wiz,lever,unverified,2026-07-25T14:21:13,"Confirmed present in a real, current Lever company directory (4,368 companies) — pending verification by an actual Maester search; Not found on lever"
+Boulevard,boulevard,greenhouse,verified,2026-07-25T15:02:33,Auto-discovered
+Alphasense,alphasense,greenhouse,verified,2026-07-25T16:03:21,Auto-discovered
+Automattic,automatticcareers,greenhouse,verified,2026-07-25T16:03:21,Auto-discovered
+palantir,palantir,lever,verified,2026-07-25T16:03:21,Auto-discovered
