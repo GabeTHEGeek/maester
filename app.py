@@ -678,6 +678,7 @@ with tab_deep_dive:
                             materials["tailored_resume_markdown"],
                             resume_pdf_path,
                             location=result.location,
+                            candidate_tagline=materials.get("candidate_tagline", ""),
                             linkedin_url=linkedin_url,
                             portfolio_url=portfolio_url,
                             github_url=github_url,

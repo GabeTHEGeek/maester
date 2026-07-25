@@ -343,15 +343,15 @@ def render_cover_letter_pdf(
     output_path: str,
     location: str = "",
     candidate_name: str = "",
-    candidate_tagline: str = "",
     linkedin_url: str = "",
     portfolio_url: str = "",
     github_url: str = "",
 ) -> str:
-    """Renders the cover letter with a letterhead (name, tagline, hyperlinked
-    links, centered) above a dated body and a proper sign-off block, rather
-    than bare paragraphs — matches the resume's header treatment so both
-    documents look like a matched set."""
+    """Renders the cover letter with a letterhead (name, hyperlinked links,
+    centered) above a dated body and a proper sign-off block, rather than
+    bare paragraphs — matches the resume's header treatment so both
+    documents look like a matched set. Deliberately no tagline here — that's
+    a resume-only element."""
     doc = SimpleDocTemplate(
         output_path,
         pagesize=_detect_page_size(location),
@@ -364,12 +364,10 @@ def render_cover_letter_pdf(
 
     if candidate_name:
         story.append(Paragraph(_inline_markdown_to_reportlab(candidate_name), _NAME_STYLE))
-    if candidate_tagline:
-        story.append(Paragraph(_inline_markdown_to_reportlab(candidate_tagline), _TAGLINE_STYLE))
     links_line = _build_links_line(linkedin_url, portfolio_url, github_url)
     if links_line:
         story.append(Paragraph(links_line, _LINKS_STYLE))
-    if candidate_name or candidate_tagline or links_line:
+    if candidate_name or links_line:
         story.append(Spacer(1, 10))
 
     story.append(Paragraph(datetime.now().strftime("%B %d, %Y"), _LETTER_DATE_STYLE))
