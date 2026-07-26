@@ -188,7 +188,38 @@ FORMAT RULES (non-negotiable):
   "leverage" (say "use" or name the tool), "spearheaded" (say "led"),
   "facilitated" (say "ran" or "set up"), "robust," "seamless," "cutting-edge,"
   "innovative," "in today's fast-paced world," "demonstrated ability to,"
-  "results-oriented," "best practices" (name the actual practice instead).
+  "results-oriented," "best practices" (name the actual practice instead),
+  "holistic," "championed," "orchestrated" (unless literally describing
+  multi-agent/system orchestration), "excited," "stakeholder alignment,"
+  "data-driven" (say what the data actually drove instead), "actionable
+  insights," "move the needle," "north star," "unique opportunity," "perfect
+  fit," "strong track record," "delve," "harness," "unlock," "paradigm,"
+  "showcasing," "crucial," "pivotal," "meticulously," "unparalleled,"
+  "testament," "garner," "transformative," "empower," "streamline,"
+  "elevate," "insightful," "disruptive," "unprecedented," "dynamic,"
+  "game-changer," "groundbreaking," "foster," "enhance," "optimize,"
+  "scalable," "breakthrough."
+- NEGATIVE PARALLELISM BAN (hard rule): never negate a framing before
+  asserting the real one. Banned patterns: "This isn't X, this is Y,"
+  "It's not about X, it's about Y," "Not just X, but Y," "X is dead, Y is
+  the future," "You don't need X, you need Y," or any sentence structured as
+  reject-assumption-then-replace-it. This is one of the most reliable
+  tells of AI-generated writing. If a draft sentence fits this shape, delete
+  the negated half entirely and state the positive claim directly. "It's
+  about the context" beats "It's not about the prompt, it's about the
+  context" every time, the negated half adds zero information.
+- COPULATIVE AVOIDANCE: don't dress up "is" or "has" as "serves as," "stands
+  as," "represents," "marks a," "holds the distinction of being." Just say
+  "is" or "has."
+- Numbers as digits, not spelled out ("3 years," "10 partnerships," not
+  "three years," "ten partnerships").
+- Bold exactly ONE key moment in the letter, the single most compelling
+  metric or proof point, not zero, not several. Everything else stays plain.
+- SELF-CHECK before finalizing: read each sentence and ask "could this exact
+  sentence appear in a cover letter for any other company, from any other
+  candidate?" If yes, rewrite it to be specific to this resume and this JD.
+  A sentence that survives this check unchanged is a sentence that isn't
+  doing its job.
 
 CONTENT: after the salutation, open with a concrete parallel between one of
 the candidate's own AI projects (from the AI Projects section of the resume:

@@ -64,8 +64,8 @@ _DATE_RIGHT_STYLE = ParagraphStyle(
     fontName="Helvetica-Oblique", alignment=2,  # 2 = right-aligned
 )
 _BULLET_STYLE = ParagraphStyle(
-    "BulletStyle", parent=_STYLES["Normal"], fontSize=11, leftIndent=14, spaceAfter=3,
-    leading=15,
+    "BulletStyle", parent=_STYLES["Normal"], fontSize=11, leftIndent=16, bulletIndent=4,
+    spaceAfter=3, leading=15,
 )
 _BODY_STYLE = ParagraphStyle(
     "BodyStyle", parent=_STYLES["Normal"], fontSize=11, spaceAfter=4, leading=15,
@@ -322,7 +322,7 @@ def render_resume_pdf(
             i += 1
         elif stripped.startswith("- "):
             bullet_text = _inline_markdown_to_reportlab(stripped[2:].strip())
-            story.append(Paragraph(f"&bull;&nbsp;&nbsp;{bullet_text}", _BULLET_STYLE))
+            story.append(Paragraph(bullet_text, _BULLET_STYLE, bulletText="\u2022"))
             i += 1
         else:
             story.append(Paragraph(_inline_markdown_to_reportlab(stripped), _BODY_STYLE))
