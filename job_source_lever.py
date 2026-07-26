@@ -103,7 +103,8 @@ def search_lever(
 
     Returns (jobs, meta) where meta = {"boards_checked": [...], "boards_failed": [...]}.
     """
-    boards = boards or DEFAULT_BOARDS
+    if boards is None:
+        boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
     exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]

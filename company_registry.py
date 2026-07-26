@@ -30,11 +30,11 @@ _SEED_ROWS = [
     {"company": "Notion", "token": "notion", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
     {"company": "Ramp", "token": "ramp", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
     {"company": "Scale AI", "token": "scaleai", "platform": "greenhouse", "status": "unverified", "notes": "Guess, unconfirmed (confirmed NOT on Ashby via a 3,161-company Ashby directory check). Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."},
-    {"company": "Perplexity", "token": "perplexityai", "platform": "ashby", "status": "verified", "notes": "Confirmed by user"},
+    {"company": "Perplexity", "token": "perplexity", "platform": "ashby", "status": "verified", "notes": "Confirmed by user"},
     {"company": "Webflow", "token": "webflow", "platform": "greenhouse", "status": "unverified", "notes": "Guess, unconfirmed (confirmed NOT on Ashby via a 3,161-company Ashby directory check). Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."},
     {"company": "Vercel", "token": "vercel", "platform": "greenhouse", "status": "unverified", "notes": "Guess, unconfirmed (confirmed NOT on Ashby via a 3,161-company Ashby directory check). Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."},
     {"company": "Linear", "token": "linear", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
-    {"company": "Retool", "token": "retool", "platform": "gem", "status": "verified", "notes": "Confirmed by user: uses Gem (gem.com), a recruiting CRM, not a public job-board API. Not discoverable via Remotive/Greenhouse/Ashby — excluded from both platform checks."},
+    {"company": "Retool", "token": "retool", "platform": "gem", "status": "verified", "notes": "Confirmed by user, and confirmed live: jobs.gem.com/retool is a real, public Retool Careers page."},
     {"company": "Replit", "token": "replit", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
     {"company": "Watershed", "token": "watershed", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
     {"company": "Runway", "token": "runway", "platform": "ashby", "status": "unverified", "notes": "Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"},
@@ -128,6 +128,23 @@ def record_discovery(rows: list, token: str, platform: str, found: bool) -> list
             "last_checked": now,
             "notes": "Auto-discovered",
         })
+    return rows
+
+
+def mark_failed_all(rows: list, token: str, platforms_tried: list) -> list:
+    """A token that was tried on every supported platform this search and
+    found on none of them — explicitly marked 'failed' rather than left as
+    an accumulating pile of 'not found on X' notes, so it's visibly distinct
+    from a company that just hasn't been checked yet. Doesn't overwrite a
+    platform already verified elsewhere (shouldn't happen in practice, since
+    verified tokens are skipped before reaching this fallback, but matches
+    the same safety rule record_discovery follows)."""
+    now = datetime.now().isoformat(timespec="seconds")
+    for r in rows:
+        if r.get("token") == token and r.get("status") != "verified":
+            r["status"] = "failed"
+            r["notes"] = f"Not found on any of: {', '.join(sorted(platforms_tried))}"
+            r["last_checked"] = now
     return rows
 
 

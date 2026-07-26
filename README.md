@@ -24,26 +24,35 @@ pipeline at a glance.
 
 **1. Search & Score** — pulls live listings from five sources: Remotive (broad
 job board) plus Greenhouse, Ashby, Gem, and Lever (all direct per-company
-boards — configurable list of companies for each, fetched in parallel so
-checking a dozen companies doesn't mean waiting on a dozen sequential API
-calls). Company platform assignments live in a user-editable, self-correcting
-registry: entries start as "unverified" guesses (or come pre-seeded from
-real third-party ATS directories) and automatically flip to "verified," or
-get flagged as wrong, based on what an actual search finds. A title
+boards). The company registry ships with roughly 15,000 companies (bulk-
+imported from real ATS company directories via `import_company_lists.py`),
+searchable and pickable in each platform's dropdown, but only a small,
+originally-curated set is selected by default, and each platform is capped
+at 20 companies per search — with thousands of companies available,
+defaulting all of them into every search would mean minutes-long searches
+and near-certain rate-limiting from the underlying APIs. Company platform
+assignments live in a user-editable, self-correcting registry: entries start
+as "unverified" guesses (or come pre-seeded from real third-party ATS
+directories) and automatically flip to "verified," or get flagged as wrong,
+based on what an actual search finds. If a company fails on the platform it
+was searched under, it automatically gets tried on the other supported
+platforms before giving up, on-demand, only for companies actually selected
+in a real search, not a proactive bulk check of the whole registry. A title
 allowlist/blocklist filters out the noise these APIs are prone to (a "product
-manager" search returning "Accounts Payable Assistant" because the word
-"product" appears somewhere in the description). Every listing you've already
-scanned in a past search gets skipped, not re-scored, a local scan history
-tracks every URL that's already been through the rubric, and reuses that
-result instead of burning another API call on something you already have an
-answer for. New listings get a fast, cheap rubric score (Haiku) plus a
-Posting Legitimacy read (does this look like a real, active opening) and a
-Compensation Reliability read (does the advertised number look like real base
-pay or inflated OTE), with salary, location, and posting date extracted
-wherever the source states them (shown as "posted 3 days ago" style relative
-dates; Gem doesn't expose a posting date at all, so that field is just
-blank there rather than guessed). Each posting date also gets a seniority-
-scaled freshness tag (🔥🔥 Hot, 🔥 Good, 🔵 Normal, 🕒 Aging, 🟡 Possibly Stale,
+manager" search returning
+"Accounts Payable Assistant" because the word "product" appears somewhere in
+the description). Every listing you've already scanned in a past search gets
+skipped, not re-scored, a local scan history tracks every URL that's already
+been through the rubric, and reuses that result instead of burning another
+API call on something you already have an answer for. New listings get a
+fast, cheap rubric score (Haiku) plus a Posting Legitimacy read (does this
+look like a real, active opening) and a Compensation Reliability read (does
+the advertised number look like real base pay or inflated OTE), with salary,
+location, and posting date extracted wherever the source states them (shown
+as "posted 3 days ago" style relative dates; Gem doesn't expose a posting
+date at all, so that field is just blank there rather than guessed). Each
+posting date also gets a seniority-scaled freshness tag (🔥🔥 Hot, 🔥 Good,
+🔵 Normal, 🕒 Aging, 🟡 Possibly Stale,
 🥶 Stale) — a 60-day-old Senior or Director posting is normal, since those
 searches run longer, while the same age on a Junior/Associate posting is a
 real staleness signal. Seniority is inferred from title keywords with "Mid"

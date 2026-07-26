@@ -32,7 +32,6 @@ DEFAULT_BOARDS = [
     "airtable",
     "ramp",
     "scaleai",
-    "perplexityai",
     "webflow",
     "vercel",
     "mercury",
@@ -80,7 +79,8 @@ def search_greenhouse(
     Returns (jobs, meta) where meta = {"boards_checked": [...], "boards_failed": [...]}
     so the caller can show which boards actually returned data.
     """
-    boards = boards or DEFAULT_BOARDS
+    if boards is None:
+        boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
     exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]

@@ -17,7 +17,8 @@ import job_source_ashby
 import job_source_gem
 import job_source_greenhouse
 import job_source_lever
-from company_registry import add_company, load_registry, record_discovery, save_registry, tokens_for_platform
+from company_registry import add_company, load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
+from resolve import resolve_cross_platform
 from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
 from extract import extract_salary, format_published_date
@@ -142,33 +143,54 @@ with tab_search:
             st.session_state.company_registry = load_registry()
         registry_rows = st.session_state.company_registry
 
+        MAX_COMPANIES_PER_PLATFORM = 20
+
         gh_registry_tokens = tokens_for_platform(registry_rows, "greenhouse")
         ab_registry_tokens = tokens_for_platform(registry_rows, "ashby")
         gem_registry_tokens = tokens_for_platform(registry_rows, "gem")
         lever_registry_tokens = tokens_for_platform(registry_rows, "lever")
 
+        # Bulk-imported companies (there can be thousands) are available as
+        # options but never pre-selected by default — only the small, originally
+        # curated set is. Otherwise a fresh page load would try to default-select
+        # every company on a platform, which is both what max_selections below
+        # is specifically there to prevent, and just a bad default regardless.
+        curated_tokens = {r["token"] for r in registry_rows if not r.get("notes", "").startswith("Bulk-imported")}
+
+        def _default_for(tokens):
+            return [t for t in tokens if t in curated_tokens][:MAX_COMPANIES_PER_PLATFORM]
+
+        gh_default = _default_for(gh_registry_tokens)
+        ab_default = _default_for(ab_registry_tokens)
+        gem_default = _default_for(gem_registry_tokens)
+        lever_default = _default_for(lever_registry_tokens)
+
         greenhouse_boards = st.multiselect(
-            "Greenhouse companies to check",
+            f"Greenhouse companies to check ({len(gh_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(gh_registry_tokens)} available)",
             options=gh_registry_tokens,
-            default=gh_registry_tokens,
-            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works.",
+            default=gh_default,
+            max_selections=MAX_COMPANIES_PER_PLATFORM,
+            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works. Capped so a search can't accidentally try to query thousands of companies at once.",
         )
         ashby_boards = st.multiselect(
-            "Ashby companies to check",
+            f"Ashby companies to check ({len(ab_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(ab_registry_tokens)} available)",
             options=ab_registry_tokens,
-            default=ab_registry_tokens,
-            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works.",
+            default=ab_default,
+            max_selections=MAX_COMPANIES_PER_PLATFORM,
+            help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works. Capped so a search can't accidentally try to query thousands of companies at once.",
         )
         gem_boards = st.multiselect(
-            "Gem companies to check",
+            f"Gem companies to check ({len(gem_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(gem_registry_tokens)} available)",
             options=gem_registry_tokens,
-            default=gem_registry_tokens,
+            default=gem_default,
+            max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Gem's API returns listings quickly but not full descriptions — matching jobs get an extra page fetch for the real JD text, so this is a bit slower per match than Greenhouse/Ashby.",
         )
         lever_boards = st.multiselect(
-            "Lever companies to check",
+            f"Lever companies to check ({len(lever_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(lever_registry_tokens)} available)",
             options=lever_registry_tokens,
-            default=lever_registry_tokens,
+            default=lever_default,
+            max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Lever doesn't publish a customer list, so these tokens are only as good as whoever last verified them — wrong or stale tokens will just show up as a failed board below.",
         )
 
@@ -344,6 +366,45 @@ with tab_search:
                     registry_rows = record_discovery(registry_rows, token, "lever", found=True)
                 for token in lever_meta.get("boards_failed", []):
                     registry_rows = record_discovery(registry_rows, token, "lever", found=False)
+
+                # Cross-platform fallback: a company that failed on the platform
+                # it was searched under gets tried on the other supported
+                # platforms before giving up — only for companies actually
+                # selected this search, never a proactive bulk scan. This is
+                # what turns "OpenAI failed on Greenhouse" into "OpenAI found
+                # on Ashby, verified" in the same search, instead of silently
+                # staying wrong until someone happens to notice and re-select
+                # it under the right platform manually.
+                failed_by_platform = {
+                    "greenhouse": gh_meta.get("boards_failed", []),
+                    "ashby": ab_meta.get("boards_failed", []),
+                    "gem": gem_meta.get("boards_failed", []),
+                    "lever": lever_meta.get("boards_failed", []),
+                }
+                failed_by_platform = {p: t for p, t in failed_by_platform.items() if t}
+
+                if failed_by_platform:
+                    with st.spinner("Checking whether any failed companies are actually on a different platform..."):
+                        extra_jobs, resolutions = resolve_cross_platform(
+                            failed_by_platform,
+                            query,
+                            limit=int(limit),
+                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
+                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                        )
+                        jobs.extend(extra_jobs)
+
+                        resolved_bits = []
+                        for token, result in resolutions.items():
+                            if result["status"] == "resolved":
+                                registry_rows = record_discovery(registry_rows, token, result["platform"], found=True)
+                                resolved_bits.append(f"{token} → {result['platform']}")
+                            else:
+                                registry_rows = mark_failed_all(registry_rows, token, result["platforms_tried"])
+
+                        if resolved_bits:
+                            st.caption(f"Resolved to a different platform this search: {', '.join(resolved_bits)}")
+
                 st.session_state.company_registry = registry_rows
                 save_registry(registry_rows)
 
