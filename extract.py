@@ -124,3 +124,54 @@ def parse_company_and_source_from_url(url: str) -> tuple:
         if match:
             return match.group(1), source
     return "", ""
+
+
+_MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
+_CURRENT_ROLE_DATE_RE = re.compile(
+    r"\*\s*([A-Za-z]+)\s+(\d{4})\s*[-–—]\s*(?:present|current)[^*]*\*",
+    re.IGNORECASE,
+)
+
+
+def compute_current_role_tenure(resume_text: str) -> str:
+    """Finds the first role dated through 'Present' and computes real elapsed
+    tenure from its start date to today. Handing the model this as a stated
+    fact, instead of asking it to infer tenure from context, closes a real
+    failure mode: a resume bullet mentioning how fast an early milestone was
+    hit (e.g., "achieved X in first 4 months") gets conflated with how long
+    the role has actually lasted, even with an explicit instruction not to.
+    Prompt instructions alone weren't reliably preventing this in practice —
+    computing the actual number removes the need for the model to infer it
+    at all. Returns "" if no current-dated role is found (a resume with no
+    ongoing role, or an unexpected date format) rather than guessing."""
+    match = _CURRENT_ROLE_DATE_RE.search(resume_text)
+    if not match:
+        return ""
+
+    month_name, year_str = match.group(1).lower(), match.group(2)
+    if month_name not in _MONTH_NAMES:
+        return ""
+
+    start = datetime(int(year_str), _MONTH_NAMES[month_name], 1)
+    now = datetime.now()
+    total_months = (now.year - start.year) * 12 + (now.month - start.month)
+    if total_months < 0:
+        return ""
+
+    years, months = divmod(total_months, 12)
+    if years and months:
+        duration = f"{years} year{'s' if years != 1 else ''}, {months} month{'s' if months != 1 else ''}"
+    elif years:
+        duration = f"{years} year{'s' if years != 1 else ''}"
+    else:
+        duration = f"{months} month{'s' if months != 1 else ''}"
+
+    return (
+        f"The candidate's current role began {match.group(1)} {year_str} and has "
+        f"run continuously since — as of today, that is approximately {duration}, "
+        f"regardless of any shorter milestone timeframe mentioned inside a bullet "
+        f"under that role."
+    )

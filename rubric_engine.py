@@ -13,6 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from extract import compute_current_role_tenure
 from llm_fallback import call_with_fallback
 
 QUICK_MODEL = "claude-haiku-4-5-20251001"
@@ -38,11 +39,23 @@ ownership, or research-scientist depth is a real gap even if it says "AI."
 Dimensions:
 - Role/Skills match (gate: if this is weak, OR if the role's actual substance is
   technical/engineering despite a PM-sounding title, OR if it requires deep
-  ML/infra depth the candidate doesn't have, cap the overall score at 2.5
-  regardless of other dimensions)
+  ML/infra depth the candidate doesn't have, the overall score has a CEILING of
+  2.5 — not a fixed value of 2.5. Within that gated range, still use real
+  judgment about how severe the specific gap is: a role with some tangential
+  overlap (e.g., adjacent domain, transferable skills) can land higher within
+  the range, around 2.0-2.5, while a role with no realistic alignment at all
+  should land lower, around 1.0-1.5. Two different listings that fail the gate
+  for two different reasons should very rarely produce the identical number —
+  if they keep landing on exactly the same score, that's a sign of defaulting
+  to a round anchor value instead of actually differentiating by severity.)
 - Seniority fit (over- or under-leveled counts against it)
 - Domain/industry relevance
 - Location/remote feasibility given what the listing states
+
+Use the full decimal range meaningfully across every dimension, not just the
+gated one — two listings with genuinely different degrees of fit, even within
+the same rough tier, should generally produce different scores, not the same
+rounded number, unless they truly are equivalently good or bad matches.
 
 Also produce two brief, separate signals — these do NOT affect the score:
 
@@ -64,7 +77,6 @@ do not invent a number).
 Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 {
   "score": <float 1.0-5.0>,
-  "grade": "<A|B|C|D|F>",
   "reason": "<one sentence, specific, not generic>",
   "legitimacy_tier": "<High Confidence|Proceed with Caution|Suspicious>",
   "legitimacy_note": "<one short neutral phrase>",
@@ -92,6 +104,27 @@ class QuickScore:
     published: str = ""
 
 
+def _score_to_grade(score: float) -> str:
+    """Deterministic score-to-grade mapping, computed in code rather than
+    asked of the model as a separate field. Real evidence from actual use
+    showed two listings with an identical 2.5 score getting different
+    grades (D and C) — the model was making two loosely related judgments
+    in one response instead of deriving one from the other. This removes
+    that whole class of inconsistency; grade is now purely a function of
+    score, so they can never disagree."""
+    if score >= 4.5:
+        return "A"
+    if score >= 3.5:
+        return "B"
+    if score >= 2.5:
+        return "C"
+    if score >= 1.5:
+        return "D"
+    return "F"
+    comp_reliability: str = ""
+    published: str = ""
+
+
 def _extract_json(text: str) -> dict:
     text = text.strip()
     # Strip markdown code fences wherever they appear, not just at the very
@@ -106,9 +139,12 @@ def _extract_json(text: str) -> dict:
 
 
 def _score_one(resume_text: str, job: dict, api_key: str, deepseek_api_key: str = "") -> QuickScore:
+    tenure_note = compute_current_role_tenure(resume_text)
+    tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
+
     user_prompt = f"""RESUME:
 {resume_text}
-
+{tenure_block}
 JOB LISTING:
 Title: {job['title']}
 Company: {job['company']}
@@ -145,7 +181,7 @@ Description: {job['description']}
         company=job["company"],
         url=job["url"],
         score=float(data["score"]),
-        grade=data["grade"],
+        grade=_score_to_grade(float(data["score"])),
         reason=data.get("reason", ""),
         source=job.get("source", "unknown"),
         board=job.get("board", "unknown"),
@@ -199,14 +235,19 @@ def batch_score(
 
 def quick_score_from_cache(row: dict, job_id: str) -> QuickScore:
     """Reconstructs a QuickScore from a scan_history.csv row, for a listing
-    that's already been scanned before — no API call needed."""
+    that's already been scanned before — no API call needed. Grade is
+    recomputed from the cached score rather than read from the row directly,
+    so any older cached entry from before grade became a deterministic
+    function of score self-heals automatically instead of continuing to
+    show whatever mismatched grade it was cached with."""
+    cached_score = float(row.get("score") or 0)
     return QuickScore(
         job_id=job_id,
         title=row.get("title", ""),
         company=row.get("company", ""),
         url=row.get("url", ""),
-        score=float(row.get("score") or 0),
-        grade=row.get("grade", "?"),
+        score=cached_score,
+        grade=_score_to_grade(cached_score),
         reason=row.get("reason", ""),
         source=row.get("source", "unknown"),
         board=row.get("board", "unknown"),
