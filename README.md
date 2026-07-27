@@ -106,6 +106,14 @@ out unless you explicitly enable it.
 schema auto-migrating (old file archived, not corrupted) if a future update
 changes what's tracked.
 
+**6. Automatic fallback on billing errors** — optional. Add a DeepSeek API
+key in the sidebar and if Anthropic ever returns a billing/credit error
+mid-session, Maester automatically retries with DeepSeek instead of failing
+outright (DeepSeek exposes an Anthropic-compatible endpoint, so this reuses
+the same request format, not a separate integration). Costs roughly $0.001
+per call at current pricing. Leave the key blank to disable this entirely,
+a billing error just fails normally, as it always did.
+
 ## Stack
 
 - **Streamlit** — UI

@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, asdict
 from typing import Optional
 
-import anthropic
+from llm_fallback import call_with_fallback
 
 
 SYSTEM_PROMPT = """You are a simulated hiring panel evaluating a candidate against a job listing.
@@ -162,12 +162,14 @@ class PanelResult:
 def _extract_json(text: str) -> dict:
     """Pull a JSON object out of a model response, tolerant of stray text/fences."""
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(json)?", "", text).strip()
-        text = re.sub(r"```$", "", text).strip()
+    # Strip markdown code fences wherever they appear, not just at the very
+    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
+    # before a fenced block, which a start-anchored check alone would miss.
+    text = re.sub(r"```(json)?", "", text).strip()
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("No JSON object found in model response")
+        snippet = text[:300] if text else "(empty response)"
+        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
     return json.loads(match.group(0))
 
 
@@ -183,10 +185,9 @@ def run_panel(
     location: str = "",
     salary: str = "",
     model: str = "claude-sonnet-4-5-20250929",
+    deepseek_api_key: str = "",
 ) -> PanelResult:
     """Run the job listing + resume through the panel and return a PanelResult."""
-    client = anthropic.Anthropic(api_key=api_key)
-
     user_prompt = f"""RESUME:
 {resume_text}
 
@@ -197,26 +198,28 @@ Role: {role_title}
 {job_text}
 """
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=3500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+    text, _provider = call_with_fallback(
+        system_prompt=SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=model,
+        max_tokens=5000,
+        deepseek_api_key=deepseek_api_key,
     )
 
-    text = response.content[0].text
     try:
         data = _extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Likely truncated mid-JSON. Retry once with a larger budget before giving up —
         # cheaper than failing the whole evaluation on an occasional long response.
-        response = client.messages.create(
-            model=model,
-            max_tokens=5000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+        text, _provider = call_with_fallback(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            anthropic_api_key=api_key,
+            anthropic_model=model,
+            max_tokens=8000,
+            deepseek_api_key=deepseek_api_key,
         )
-        text = response.content[0].text
         data = _extract_json(text)
 
     return PanelResult(

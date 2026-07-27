@@ -13,7 +13,7 @@ is told to leave it alone rather than paper over the gap.
 import json
 import re
 
-import anthropic
+from llm_fallback import call_with_fallback
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
 
@@ -79,8 +79,11 @@ lead with the candidate's strongest concrete numbers already present in the
 resume (retention/conversion percentages, dollar amounts, team size, scale)
 rather than descriptive adjectives — "led a team that grew retention 27%"
 beats "experienced leader focused on growth," using whatever specific figures
-the source resume actually has. Keep the same structure (same headers, same
-roles, same companies, same dates) and the same overall length — this is a
+the source resume actually has. HARD LIMIT: the summary paragraph is 3
+sentences maximum — compress by cutting words, not by removing the strongest
+proof points; a tight 2-sentence summary beats a 3-sentence one padded to
+fill the limit. Keep the same structure (same headers, same roles, same
+companies, same dates) and the same overall length otherwise — this is a
 reordering and rewording pass, not a rewrite.
 
 TENURE VS. MILESTONE TIMEFRAMES: a bullet may state how quickly a milestone
@@ -171,13 +174,13 @@ FORMAT RULES (non-negotiable):
   reach for one. Check your own output for the — character before finalizing
   and rewrite any sentence that has one.
 - HARD LIMIT: 3 paragraphs maximum, 280 words maximum for the entire letter
-  body (salutation through sign-off), and 4 sentences maximum per paragraph.
+  body (salutation through sign-off), and 3 sentences maximum per paragraph.
   This is a ceiling, not a target to fill — a tight, well-argued 200-word
   letter beats a 280-word one padded to hit the limit. All four content beats
   (opening hook, skills, experience, closing) still need to be present within
   that budget; compress by cutting words and combining beats into fewer
   paragraphs, not by dropping one entirely. Count your own sentences and
-  words before finalizing — if any paragraph is over 4 sentences or the
+  words before finalizing — if any paragraph is over 3 sentences or the
   total is over 280 words, cut until it isn't.
 - Sign off with the candidate's name only — do NOT include links in the
   letter body or signature; those are rendered separately in the document
@@ -193,7 +196,9 @@ FORMAT RULES (non-negotiable):
   multi-agent/system orchestration), "excited," "stakeholder alignment,"
   "data-driven" (say what the data actually drove instead), "actionable
   insights," "move the needle," "north star," "unique opportunity," "perfect
-  fit," "strong track record," "delve," "harness," "unlock," "paradigm,"
+  fit," "strong track record," "I'm drawn to" (say specifically why instead:
+  what problem, what detail, what fact — "drawn to" names a feeling without
+  a reason attached to it), "delve," "harness," "unlock," "paradigm,"
   "showcasing," "crucial," "pivotal," "meticulously," "unparalleled,"
   "testament," "garner," "transformative," "empower," "streamline,"
   "elevate," "insightful," "disruptive," "unprecedented," "dynamic,"
@@ -256,12 +261,14 @@ Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 
 def _extract_json(text: str) -> dict:
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(json)?", "", text).strip()
-        text = re.sub(r"```$", "", text).strip()
+    # Strip markdown code fences wherever they appear, not just at the very
+    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
+    # before a fenced block, which a start-anchored check alone would miss.
+    text = re.sub(r"```(json)?", "", text).strip()
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("No JSON object found in model response")
+        snippet = text[:300] if text else "(empty response)"
+        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
     return json.loads(match.group(0))
 
 
@@ -274,6 +281,7 @@ def generate_tailored_materials(
     resume_fixes: list,
     api_key: str,
     model: str = TAILOR_MODEL,
+    deepseek_api_key: str = "",
 ) -> dict:
     """Returns {"candidate_name": str, "candidate_tagline": str,
     "detected_archetype": str, "tailored_resume_markdown": str,
@@ -282,8 +290,6 @@ def generate_tailored_materials(
     Links (LinkedIn/portfolio/GitHub) are intentionally NOT handled here —
     they're rendered directly into the PDF header by pdf_export.py, not
     written into the letter body by the model."""
-    client = anthropic.Anthropic(api_key=api_key)
-
     user_prompt = f"""RESUME (Markdown, source of truth — do not invent beyond this):
 {resume_text}
 
@@ -297,25 +303,28 @@ Top gaps identified: {"; ".join(top_gaps) if top_gaps else "none noted"}
 Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none noted"}
 """
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=4500,
-        system=TAILOR_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+    text, _provider = call_with_fallback(
+        system_prompt=TAILOR_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=model,
+        max_tokens=6000,
+        deepseek_api_key=deepseek_api_key,
     )
 
-    text = response.content[0].text
     try:
         data = _extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Same truncation safety net as the deep-dive panel.
-        response = client.messages.create(
-            model=model,
-            max_tokens=6500,
-            system=TAILOR_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+        text, _provider = call_with_fallback(
+            system_prompt=TAILOR_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            anthropic_api_key=api_key,
+            anthropic_model=model,
+            max_tokens=10000,
+            deepseek_api_key=deepseek_api_key,
         )
-        data = _extract_json(response.content[0].text)
+        data = _extract_json(text)
 
     if "tailored_resume_markdown" in data:
         data["tailored_resume_markdown"] = _strip_duplicate_competencies_section(
@@ -324,15 +333,67 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         data["tailored_resume_markdown"] = _strip_duplicate_summary_headline(
             data["tailored_resume_markdown"]
         )
+        data["tailored_resume_markdown"] = _enforce_summary_sentence_limit(
+            data["tailored_resume_markdown"], max_sentences=3
+        )
 
     if "cover_letter" in data:
         data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
         word_count = len(data["cover_letter"].split())
-        if word_count > 300:
-            data["cover_letter"] = _condense_cover_letter(data["cover_letter"], client, model)
+        over_sentence_limit = any(
+            _count_sentences(p) > 3 for p in data["cover_letter"].split("\n\n") if p.strip()
+        )
+        if word_count > 300 or over_sentence_limit:
+            data["cover_letter"] = _condense_cover_letter(
+                data["cover_letter"], api_key, model, deepseek_api_key
+            )
             data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
 
     return data
+
+
+_SENTENCE_BOUNDARY_RE = re.compile(r"[.!?]+(?=\s|$)")
+
+
+def _count_sentences(text: str) -> int:
+    """Rough sentence count via terminal punctuation — same level of
+    heuristic as the existing word-count check (won't perfectly handle
+    abbreviations like 'U.S.' or 'Inc.', but good enough for a backstop,
+    not a grammar parser)."""
+    return len(_SENTENCE_BOUNDARY_RE.findall(text.strip()))
+
+
+def _enforce_summary_sentence_limit(markdown_text: str, max_sentences: int = 3) -> str:
+    """Hard backstop: the prompt instructs a 3-sentence-max Summary paragraph,
+    but that's a request, not a guarantee. Finds the Summary section's real
+    narrative paragraph (skipping a standalone pipe-delimited headline line,
+    if one slipped through) and truncates it to the first N sentences rather
+    than trusting the model to have counted correctly. Deterministic
+    truncation, not a follow-up API call — a short summary paragraph is safe
+    to trim mechanically without an extra round-trip."""
+    match = re.search(r"##\s*Summary\s*\n+(.*?)(?=\n##\s|\Z)", markdown_text, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return markdown_text
+
+    section_text = match.group(1)
+    paragraphs = [p for p in section_text.split("\n\n") if p.strip()]
+
+    for i, para in enumerate(paragraphs):
+        stripped = para.strip()
+        looks_like_headline = "|" in stripped and len(stripped) < 140 and "\n" not in stripped
+        if looks_like_headline:
+            continue
+        if _count_sentences(stripped) > max_sentences:
+            sentences = _SENTENCE_BOUNDARY_RE.split(stripped)
+            boundaries = _SENTENCE_BOUNDARY_RE.findall(stripped)
+            trimmed = "".join(
+                s + b for s, b in zip(sentences[:max_sentences], boundaries[:max_sentences])
+            ).strip()
+            paragraphs[i] = trimmed
+        break  # only the first substantive paragraph is the narrative summary
+
+    new_section_text = "\n\n".join(paragraphs) + "\n"
+    return markdown_text[: match.start(1)] + new_section_text + markdown_text[match.end(1):]
 
 
 _COMPETENCY_SECTION_RE = re.compile(
@@ -368,14 +429,14 @@ def _strip_duplicate_summary_headline(markdown_text: str) -> str:
     return _SUMMARY_HEADLINE_RE.sub(repl, markdown_text, count=1)
 
 
-def _condense_cover_letter(cover_letter: str, client: "anthropic.Anthropic", model: str) -> str:
+def _condense_cover_letter(cover_letter: str, api_key: str, model: str, deepseek_api_key: str = "") -> str:
     """Word-limit enforcement backstop: the prompt asks for a 280-word, 3
     paragraph ceiling, but that's a request, not a guarantee. If the model
     still comes back over, ask it to condense rather than trust the first
     pass — cheaper and more reliable than truncating text programmatically,
     which risks cutting a sentence mid-thought."""
     condense_prompt = f"""This cover letter is over the word limit. Condense it to 280 words maximum,
-3 paragraphs maximum, 4 sentences maximum per paragraph, without losing any of
+3 paragraphs maximum, 3 sentences maximum per paragraph, without losing any of
 its actual content beats (opening hook, skills, experience, closing) or
 resume-grounded specifics. Cut words and combine ideas into fewer paragraphs —
 do not drop a beat entirely. Keep every formatting rule from before: opens
@@ -387,12 +448,15 @@ LETTER TO CONDENSE:
 
 Respond with ONLY the condensed letter text, no JSON, no commentary, no markdown fences."""
 
-    response = client.messages.create(
-        model=model,
+    text, _provider = call_with_fallback(
+        system_prompt="",
+        user_prompt=condense_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=model,
         max_tokens=1200,
-        messages=[{"role": "user", "content": condense_prompt}],
+        deepseek_api_key=deepseek_api_key,
     )
-    return response.content[0].text.strip()
+    return text.strip()
 
 
 def _strip_em_dashes(text: str) -> str:

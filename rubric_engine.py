@@ -13,7 +13,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-import anthropic
+from llm_fallback import call_with_fallback
 
 QUICK_MODEL = "claude-haiku-4-5-20251001"
 
@@ -94,16 +94,18 @@ class QuickScore:
 
 def _extract_json(text: str) -> dict:
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(json)?", "", text).strip()
-        text = re.sub(r"```$", "", text).strip()
+    # Strip markdown code fences wherever they appear, not just at the very
+    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
+    # before a fenced block, which a start-anchored check alone would miss.
+    text = re.sub(r"```(json)?", "", text).strip()
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
-        raise ValueError("No JSON object found in model response")
+        snippet = text[:300] if text else "(empty response)"
+        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
     return json.loads(match.group(0))
 
 
-def _score_one(client, resume_text: str, job: dict) -> QuickScore:
+def _score_one(resume_text: str, job: dict, api_key: str, deepseek_api_key: str = "") -> QuickScore:
     user_prompt = f"""RESUME:
 {resume_text}
 
@@ -113,13 +115,30 @@ Company: {job['company']}
 Location: {job['location']}
 Description: {job['description']}
 """
-    response = client.messages.create(
-        model=QUICK_MODEL,
-        max_tokens=400,
-        system=RUBRIC_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+    text, _provider = call_with_fallback(
+        system_prompt=RUBRIC_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=QUICK_MODEL,
+        max_tokens=700,
+        deepseek_api_key=deepseek_api_key,
     )
-    data = _extract_json(response.content[0].text)
+    try:
+        data = _extract_json(text)
+    except (ValueError, json.JSONDecodeError):
+        # Same truncation safety net as the deep-dive panel and tailoring —
+        # quick-scan was missing this entirely, so any truncated response
+        # just failed outright instead of getting a chance to retry with
+        # more room, unlike the other two engines.
+        text, _provider = call_with_fallback(
+            system_prompt=RUBRIC_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            anthropic_api_key=api_key,
+            anthropic_model=QUICK_MODEL,
+            max_tokens=1200,
+            deepseek_api_key=deepseek_api_key,
+        )
+        data = _extract_json(text)
     return QuickScore(
         job_id=str(job.get("id", job["url"])),
         title=job["title"],
@@ -139,12 +158,20 @@ Description: {job['description']}
     )
 
 
-def batch_score(resume_text: str, jobs: list[dict], api_key: str, max_workers: int = 5) -> list[QuickScore]:
+def batch_score(
+    resume_text: str,
+    jobs: list[dict],
+    api_key: str,
+    deepseek_api_key: str = "",
+    max_workers: int = 5,
+) -> list[QuickScore]:
     """Score every job in `jobs` against `resume_text` in parallel, return ranked results."""
-    client = anthropic.Anthropic(api_key=api_key)
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_score_one, client, resume_text, job): job for job in jobs}
+        futures = {
+            executor.submit(_score_one, resume_text, job, api_key, deepseek_api_key): job
+            for job in jobs
+        }
         for future in as_completed(futures):
             job = futures[future]
             try:

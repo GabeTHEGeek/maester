@@ -21,7 +21,7 @@ from company_registry import add_company, load_registry, mark_failed_all, record
 from resolve import resolve_cross_platform
 from dedup import load_seen_urls, record_scans
 from email_notify import build_deep_dive_summary, send_summary_email
-from extract import extract_salary, format_published_date
+from extract import extract_salary, format_published_date, parse_company_and_source_from_url
 from freshness import compute_freshness
 from fetch_job import check_liveness, fetch_job_page, fetch_job_text
 from job_source import search_jobs
@@ -70,6 +70,15 @@ with st.sidebar:
         type="password",
         value=os.environ.get("ANTHROPIC_API_KEY", ""),
         help="Get one at console.anthropic.com. Never stored, only used for this session.",
+    )
+    deepseek_api_key = st.text_input(
+        "DeepSeek API key (optional fallback)",
+        type="password",
+        value=os.environ.get("DEEPSEEK_API_KEY", ""),
+        help="Get one at platform.deepseek.com — a few dollars of credit goes a very long "
+        "way (roughly $0.001 per call). If Anthropic returns a billing/credit error, "
+        "Maester automatically retries with DeepSeek instead of failing outright. "
+        "Leave blank to disable — a billing error will just fail normally, as before.",
     )
     st.divider()
     st.subheader("Resume")
@@ -437,9 +446,17 @@ with tab_search:
                 if new_jobs:
                     with st.spinner(f"Scoring {len(new_jobs)} new listings against your resume..."):
                         try:
-                            new_results = batch_score(resume_text, new_jobs, api_key)
+                            new_results = batch_score(resume_text, new_jobs, api_key, deepseek_api_key=deepseek_api_key)
                             results.extend(new_results)
-                            record_scans(new_results)
+                            # Only cache genuine successes — a failed attempt (grade "?")
+                            # shouldn't get treated as "already scored" and silently block
+                            # that listing from ever being retried on a future search, even
+                            # after whatever caused the failure gets fixed.
+                            succeeded = [r for r in new_results if r.grade != "?"]
+                            record_scans(succeeded)
+                            failed_count = len(new_results) - len(succeeded)
+                            if failed_count:
+                                st.caption(f"{failed_count} listing(s) failed to score and were not cached — they'll be retried on your next search.")
                         except Exception as e:
                             st.error(f"Scoring failed: {e}")
 
@@ -523,7 +540,15 @@ with tab_deep_dive:
         st.link_button("Open listing ↗", job["url"])
         target_job = job
     elif manual_url:
-        target_job = {"title": "", "company": "", "url": manual_url, "description": ""}
+        parsed_company, parsed_source = parse_company_and_source_from_url(manual_url)
+        target_job = {
+            "title": "",
+            "company": parsed_company,
+            "url": manual_url,
+            "description": "",
+            "source": parsed_source or "unknown",
+            "board": parsed_company or "unknown",
+        }
 
     if st.button("Run full panel", type="primary"):
         if not api_key:
@@ -580,6 +605,7 @@ with tab_deep_dive:
                         board=target_job.get("board", "unknown"),
                         location=target_job.get("location", ""),
                         salary=salary,
+                        deepseek_api_key=deepseek_api_key,
                     )
                     log_result(result)
                     # Persisted so the tailoring button below survives the rerun
@@ -714,6 +740,7 @@ with tab_deep_dive:
                         top_gaps=result.top_gaps,
                         resume_fixes=result.resume_fixes,
                         api_key=api_key,
+                        deepseek_api_key=deepseek_api_key,
                     )
                     st.session_state.tailored_materials = materials
                 except Exception as e:

@@ -101,3 +101,26 @@ def format_published_date(raw: str) -> str:
     if delta_days < 30:
         return f"{delta_days} days ago"
     return parsed.strftime("%b %d, %Y")
+
+
+_ATS_URL_PATTERNS = [
+    (re.compile(r"job-boards\.greenhouse\.io/([^/]+)/"), "greenhouse"),
+    (re.compile(r"jobs\.ashbyhq\.com/([^/]+)/"), "ashby"),
+    (re.compile(r"jobs\.lever\.co/([^/]+)/"), "lever"),
+    (re.compile(r"jobs\.gem\.com/([^/]+)/"), "gem"),
+]
+
+
+def parse_company_and_source_from_url(url: str) -> tuple:
+    """For a manually-pasted URL (no cached search-result metadata to draw
+    from), recover the company slug and platform directly from the URL's own
+    structure — deterministic, no extra API call needed. Returns ("", "")
+    if the URL doesn't match any known ATS pattern (e.g. a custom careers
+    page), which is honest — there's nothing reliable to parse there."""
+    if not url:
+        return "", ""
+    for pattern, source in _ATS_URL_PATTERNS:
+        match = pattern.search(url)
+        if match:
+            return match.group(1), source
+    return "", ""
