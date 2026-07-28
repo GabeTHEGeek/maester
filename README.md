@@ -6,126 +6,47 @@ hours on a listing that was never going to land.
 
 ## Why I built this
 
-Job search advice usually says "tailor every resume." Nobody says how to know
+Job search advice says "tailor every resume." Nobody says how to know
 *which* listings deserve that time. Maester simulates the actual panel that
 reviews a candidate — a Hiring Manager, a Senior PM, an Engineering Lead, a
-Design Lead, and a Recruiter, each with a different bar and each allowed to
-disagree — and pairs it with the unglamorous plumbing real job search needs:
-searching live boards, filtering out noise, flagging sketchy postings, and
-generating an honest, non-fabricated tailored application when a listing is
-actually worth it.
-
-It's not a chatbot wrapper. Each panelist is prompted with a distinct
-evaluation lens and is required to surface disagreement rather than converge
-into generic praise. Every deep-dive is logged locally so you can compare your
-pipeline at a glance.
+Design Lead, and a Recruiter, each with a different bar, each required to
+reach an independent verdict rather than converge into generic praise — and
+pairs it with the plumbing a real job search needs: live search, noise
+filtering, legitimacy checks, and an honest, non-fabricated tailored
+application when a listing is actually worth the time.
 
 ## How it works
 
-**1. Search & Score** — pulls live listings from five sources: Remotive (broad
-job board) plus Greenhouse, Ashby, Gem, and Lever (all direct per-company
-boards). The company registry ships with roughly 15,000 companies (bulk-
-imported from real ATS company directories via `import_company_lists.py`),
-searchable and pickable in each platform's dropdown, but only a small,
-originally-curated set is selected by default, and each platform is capped
-at 20 companies per search — with thousands of companies available,
-defaulting all of them into every search would mean minutes-long searches
-and near-certain rate-limiting from the underlying APIs. Company platform
-assignments live in a user-editable, self-correcting registry: entries start
-as "unverified" guesses (or come pre-seeded from real third-party ATS
-directories) and automatically flip to "verified," or get flagged as wrong,
-based on what an actual search finds. If a company fails on the platform it
-was searched under, it automatically gets tried on the other supported
-platforms before giving up, on-demand, only for companies actually selected
-in a real search, not a proactive bulk check of the whole registry. A title
-allowlist/blocklist filters out the noise these APIs are prone to (a "product
-manager" search returning
-"Accounts Payable Assistant" because the word "product" appears somewhere in
-the description). Every listing you've already scanned in a past search gets
-skipped, not re-scored, a local scan history tracks every URL that's already
-been through the rubric, and reuses that result instead of burning another
-API call on something you already have an answer for. New listings get a
-fast, cheap rubric score (Haiku) plus a Posting Legitimacy read (does this
-look like a real, active opening) and a Compensation Reliability read (does
-the advertised number look like real base pay or inflated OTE), with salary,
-location, and posting date extracted wherever the source states them (shown
-as "posted 3 days ago" style relative dates; Gem doesn't expose a posting
-date at all, so that field is just blank there rather than guessed). Each
-posting date also gets a seniority-scaled freshness tag (🔥🔥 Hot, 🔥 Good,
-🔵 Normal, 🕒 Aging, 🟡 Possibly Stale,
-🥶 Stale) — a 60-day-old Senior or Director posting is normal, since those
-searches run longer, while the same age on a Junior/Associate posting is a
-real staleness signal. Seniority is inferred from title keywords with "Mid"
-as the default when there's no clear signal, and this is informational only,
-never folded into the fit score.
+**1. Search & Score** — Pulls live listings from five job board APIs
+(Remotive, Greenhouse, Ashby, Gem, Lever) across a self-correcting company
+registry. Every result gets a fast rubric score, a posting legitimacy read,
+a compensation reliability read, and a seniority-aware freshness rating, all
+before you open a single tab.
 
-**2. Deep Dive** — on any listing worth a closer look, a full five-perspective
-panel (Sonnet) runs, citing specific sections of your resume, and returns a
-fit score, tier, recommendation, top gaps, resume fixes, interview questions
-to prep for, and the same legitimacy/comp checks at panel-level depth. For
-manually-pasted URLs, a best-effort liveness check flags postings that look
-closed (redirected to an error page, "no longer accepting applications"
-language, suspiciously thin content) before you trust the evaluation — a
-signal to check, not a hard block, since the heuristic isn't definitive.
+**2. Deep Dive** — On any listing worth a closer look, a full five-
+perspective panel evaluates real fit against your actual resume and returns
+a score, tier, gaps, resume fixes, and interview prep questions.
 
-**3. Tailor & Export** — generates a tailored resume and cover letter grounded
-in the panel's own findings: reorders and rewords your existing bullets,
-detects which of six PM archetypes the role fits and foregrounds the matching
-experience, weaves in the JD's own terminology where honestly applicable, and
-generates a Core Competencies tag section pulled from what's actually in your
-resume. Hard rule, enforced in the prompt and backed by code-level checks, not
-just instructions: never invents experience, employers, dates, or metrics not
-already in your resume.
+**3. Tailor & Export** — Generates a tailored, ATS-safe resume and cover
+letter grounded in the panel's own findings, with a hard no-fabrication rule
+enforced in code, not just prompted for.
 
-The resume PDF has a centered header with hyperlinked LinkedIn/portfolio/
-GitHub links (whichever you've filled in the sidebar), a short role tagline
-centered right above the Summary section (generated by the tailoring engine
-itself, not a sidebar field — resume-only, the cover letter deliberately
-doesn't have one), employment dates right-aligned against each role the way
-most resume templates do it, and 11pt body text throughout.
+**4. Dashboard & notifications** — Every evaluation is logged locally for
+comparison at a glance, with optional email summaries sent through your own
+SMTP account.
 
-The cover letter opens with a real project parallel when one genuinely
-exists, always opens with "Dear Hiring Manager," and is capped hard: 3
-paragraphs, 4 sentences per paragraph, 280 words total, zero em dashes
-anywhere. If a first draft comes back over the word limit, the app
-automatically asks the model to condense it rather than trusting the first
-pass. The letterhead includes your name, today's date, and the same
-hyperlinked links as the resume; it signs off with "Best regards," and your
-name, no footer, no links repeated in the body.
-
-Both render to clean, single-column, ATS-safe PDFs (region-aware — Letter for
-US/Canada, A4 elsewhere).
-
-**4. Email notifications** — optional. Enter your own email and an app
-password (Gmail requires an App Password, not your regular one) in the
-sidebar, and either click "Email me this summary" on any Deep Dive result or
-turn on auto-send for every run. Sent via your own SMTP account; nothing goes
-out unless you explicitly enable it.
-
-**5. Dashboard** — every deep-dive is logged to a local CSV tracker, with the
-schema auto-migrating (old file archived, not corrupted) if a future update
-changes what's tracked.
-
-**6. Automatic fallback on billing errors** — optional. Add a DeepSeek API
-key in the sidebar and if Anthropic ever returns a billing/credit error
-mid-session, Maester automatically retries with DeepSeek instead of failing
-outright (DeepSeek exposes an Anthropic-compatible endpoint, so this reuses
-the same request format, not a separate integration). Costs roughly $0.001
-per call at current pricing. Leave the key blank to disable this entirely,
-a billing error just fails normally, as it always did.
+**5. Automatic fallback** — Optional secondary provider so a billing hiccup
+mid-session doesn't stop your search.
 
 ## Stack
 
 - **Streamlit** — UI
-- **Anthropic API (Claude)** — Haiku for the fast triage pass, Sonnet for the
-  deep-dive panel and tailoring
-- **Remotive + Greenhouse + Ashby + Gem + Lever APIs** — live job search, no scraping
-- **requests + BeautifulSoup** — fallback JD extraction for pasted URLs
-- **reportlab** — ATS-safe PDF rendering (single-column, standard fonts, no
-  tables/images that trip parsers)
+- **Anthropic API (Claude)** — tiered models for triage vs. deep evaluation
+- **Remotive, Greenhouse, Ashby, Gem, Lever APIs** — live job search, no scraping
+- **requests + BeautifulSoup** — fallback extraction for manually-pasted URLs
+- **reportlab** — ATS-safe PDF rendering
 - **smtplib** (standard library) — optional email summaries via your own SMTP
-  account
-- **CSV** — zero-setup local tracker, no database needed for an MVP
+- **CSV** — zero-setup local storage, no database needed for an MVP
 
 ## Run it
 
@@ -151,23 +72,18 @@ If you fork this repo, double-check `git ls-files | grep resume` only shows
 ## What this deliberately doesn't do
 
 - No auto-apply — every application is your call, nothing gets submitted
-- No invented experience, employers, or metrics — the tailoring prompt is
-  built around this as a hard rule, not a suggestion
-- No auto-email unless you opt in — the app only sends if you enable
-  auto-send or click "send now"
-- No cloud storage — the tracker and scan history are both local CSVs;
-  nothing leaves your machine except what you send to the Anthropic API (and,
-  if you opt in, your own SMTP server for email summaries)
+- No invented experience, employers, or metrics — enforced as a hard rule
+- No auto-email unless you opt in
+- No cloud storage — everything stays local except what you send to the
+  Anthropic API (and, if you opt in, your own SMTP server)
 
 ## Roadmap
 
 - [ ] SQLite instead of CSV once the tracker needs querying, not just viewing
-- [ ] Cost tracking per session (rough token spend estimate)
-- [ ] Cross-listing detection: fingerprint job description text to catch the
-      same role posted by both the direct employer and a recruitment agency
-      under a different name (a real feature in career-ops, not yet built here)
+- [ ] Cost tracking per session
+- [ ] Cross-listing detection — flag the same role reposted by an agency
+      under a different name
 
 ## License
 
 MIT
-
