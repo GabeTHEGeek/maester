@@ -264,14 +264,30 @@ with the strongest resume-grounded hook instead, ideally the single most
 relevant metric from the resume, stated plainly and early rather than saved
 for later.
 
+IF THE ROLE IS GENUINELY AI-FORWARD (the detected archetype is AI-native, or
+the JD itself emphasizes LLM/agent/AI product work as a core part of the
+job, not just a passing mention): lean into Maester specifically. It's the
+candidate's strongest, most differentiated proof point for exactly this kind
+of role, an actual shipped multi-agent system with real reliability
+engineering behind it, not a claimed skill. For a genuinely AI-forward role,
+this should be the opening parallel by default, not just a candidate for it,
+and it's also fair game as one of the 2-3 experience stories below, not only
+the opening line. For roles that are NOT genuinely AI-forward, stay
+conservative as before: only reach for it if the parallel is real, and don't
+force it in just to feature it.
+
 For the experience paragraph(s), pick 2-3 stories using the underlying shape
 of Situation, Task, Action, Result, and a real Metric (STAR-M) even though the
-letter shouldn't be literally labeled that way. Quantify wherever the resume
-already has a number; don't describe a project in vague terms when the resume
-states a concrete result. Then make the "why them, why you" connection
-explicit: name a specific requirement or problem from the JD and state
-directly how the resume evidence answers it, not just parallel accomplishments
-listed side by side with no stated connection.
+letter shouldn't be literally labeled that way. These can be drawn from either
+the resume's work Experience section OR, for a genuinely AI-forward role,
+Maester itself (the keyword-overlap-vs-real-fit reliability story, the
+multi-provider fallback work, or the panel's disagreement-by-design
+architecture are all real, specific stories, not just a project description).
+Quantify wherever the resume already has a number; don't describe a project
+in vague terms when the resume states a concrete result. Then make the "why
+them, why you" connection explicit: name a specific requirement or problem
+from the JD and state directly how the resume evidence answers it, not just
+parallel accomplishments listed side by side with no stated connection.
 
 Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 {

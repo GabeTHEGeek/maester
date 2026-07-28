@@ -2,7 +2,7 @@ company,token,platform,status,last_checked,notes
 Anthropic,anthropic,greenhouse,verified,,"Confirmed via job URL. Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."
 Airtable,airtable,greenhouse,verified,2026-07-28T15:34:13,Auto-discovered
 Mercury,mercury,greenhouse,verified,,"Confirmed via job URL. Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."
-OpenAI,openai,ashby,verified,2026-07-26T04:01:51,Confirmed by user
+OpenAI,openai,ashby,verified,2026-07-28T19:10:32,Auto-discovered
 Databricks,databricks,greenhouse,unverified,,"Guess, unconfirmed (confirmed NOT on Ashby via a 3,161-company Ashby directory check). Also confirmed present in a real, current Greenhouse company directory (8,333 companies), reinforcing this guess."
 Notion,notion,ashby,unverified,,"Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"
 Ramp,ramp,ashby,unverified,,"Confirmed present in a real, current Ashby company directory (3,161 companies, github.com/Feashliaa/job-board-aggregator) — high confidence, pending verification by an actual Maester search"
@@ -7198,7 +7198,7 @@ Gongio,gongio,greenhouse,unverified,,Bulk-imported from a real greenhouse compan
 Convene,convene,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Guerrilla Games,guerrilla-games,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Acadiapharmaceuticals,acadiapharmaceuticals,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Codepath,codepath,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Codepath,codepath,greenhouse,verified,2026-07-28T19:40:25,Auto-discovered
 Bluecrestcapitalmanagement,bluecrestcapitalmanagement,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Alphahawaii,alphahawaii,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Remedyhomehealthcare,remedyhomehealthcare,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -7304,7 +7304,7 @@ Pharmacann,pharmacann,greenhouse,unverified,,Bulk-imported from a real greenhous
 Adp,adp,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Turing,turing,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Diginn,diginn,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Runpod,runpod,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Runpod,runpod,ashby,verified,2026-07-28T19:31:29,Auto-discovered
 Audigent,audigent,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Orioninnovationnaukri,orioninnovationnaukri,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Openteams,openteams,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -8090,7 +8090,7 @@ Vicecanada,vicecanada,greenhouse,unverified,,Bulk-imported from a real greenhous
 Csgconsultantssenior Building Inspector 4,csgconsultantssenior-building-inspector-4,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Funinc,funinc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Thetustingroupasp,thetustingroupasp,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Cadencesolutions,cadencesolutions,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Cadencesolutions,solutions,greenhouse,verified,2026-07-28T19:10:32,Auto-discovered
 Wyndlabs,wyndlabs,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Jwplayer,jwplayer,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Byheart,byheart,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -11642,7 +11642,7 @@ Oddin,oddin,lever,unverified,,Bulk-imported from a real lever company directory 
 Resultadosdigitais,resultadosdigitais,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Cerevel 2,cerevel-2,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Thesalesfactory,thesalesfactory,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
-Quantco ,quantco-,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
+Quantco,quantco-,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Tecla,tecla,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Tombras,tombras,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Topazlabs,topazlabs,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
@@ -15034,3 +15034,4 @@ Nrccua,nrccua,lever,unverified,,Bulk-imported from a real lever company director
 Blueland,blueland,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Bonsaileadershipgroup,bonsaileadershipgroup,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Elorian,elorian-ai-inc,ashby,verified,,Confirmed via their own Join Us link (jobs.ashbyhq.com/elorian-ai-inc)
+Gemini,embed,greenhouse,failed,2026-07-28T19:46:11,"Not found on any of: ashby, gem, greenhouse, lever"
