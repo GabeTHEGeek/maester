@@ -15,6 +15,18 @@ unverified selector risks silently matching some smaller, wrong element and
 cutting off real content with no visible error. Simpler and more reliable to
 strip the known noise and keep everything else.
 
+Some ATS platforms (Ashby in particular) render job pages as a JS-only
+single-page app — a plain requests+BeautifulSoup fetch only sees a "You need
+to enable JavaScript to run this app" placeholder, not the real content, even
+though the posting is genuinely live and full of detail. Confirmed directly:
+a real, active Ashby posting returned almost no body text this way, which the
+liveness check correctly (but misleadingly) flagged as "very little content."
+The actual job description is still recoverable without a full headless
+browser, though — it's duplicated into Open Graph / Twitter Card meta tags,
+meant for social link previews, and those ARE present in the initial HTML.
+Falling back to those when the body text comes back too thin fixes this for
+Ashby and any other platform following the same OG-meta pattern.
+
 Also does a best-effort posting-liveness check, modeled on signals used by
 career-ops's scanner: a redirect to an error page (Greenhouse's pattern when
 a role closes), known "this posting is closed" phrases, or suspiciously thin
@@ -42,6 +54,24 @@ _EXPIRED_PHRASES = [
     "posting has been removed",
 ]
 
+# Below this length, the body text is almost certainly a JS-app placeholder,
+# not real content — worth trying the meta-tag fallback rather than trusting
+# it as-is.
+_THIN_CONTENT_THRESHOLD = 300
+
+
+def _extract_meta_description(soup: BeautifulSoup) -> str:
+    """Recovers job description text from Open Graph / Twitter Card meta
+    tags when the visible body text is too thin to be real (a JS-only SPA
+    that never rendered). These tags exist specifically so links preview
+    correctly when shared on social platforms, so ATS systems that are
+    otherwise JS-only tend to still populate them with the full JD."""
+    for attrs in ({"property": "og:description"}, {"name": "twitter:description"}):
+        tag = soup.find("meta", attrs=attrs)
+        if tag and tag.get("content"):
+            return tag["content"].strip()
+    return ""
+
 
 def fetch_job_page(url: str, timeout: int = 10) -> dict:
     """Fetches and cleans a job page, returning both the text and the final
@@ -52,6 +82,10 @@ def fetch_job_page(url: str, timeout: int = 10) -> dict:
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
+    # Meta tags need to be read before the <head>'s contents get stripped
+    # below, and BeautifulSoup's parsed tree is shared, so grab this first.
+    meta_description = _extract_meta_description(soup)
+
     for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "form"]):
         tag.decompose()
 
@@ -59,6 +93,9 @@ def fetch_job_page(url: str, timeout: int = 10) -> dict:
     lines = [line.strip() for line in text.splitlines()]
     lines = [line for line in lines if line]
     cleaned = "\n".join(lines)
+
+    if len(cleaned) < _THIN_CONTENT_THRESHOLD and len(meta_description) > len(cleaned):
+        cleaned = meta_description
 
     # Generous cap now that forms (the biggest source of bloat) are stripped —
     # this is a safety margin, not the primary defense against noise.

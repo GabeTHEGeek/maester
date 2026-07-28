@@ -147,6 +147,7 @@ with tab_search:
             options=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
             default=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
             help="Remotive is a broad job board (full-text matched). Greenhouse, Ashby, Gem, and Lever pull directly from specific companies' own job boards (title-matched, no full-text noise).",
+            key="search_sources",
         )
         if "company_registry" not in st.session_state:
             st.session_state.company_registry = load_registry()
@@ -164,7 +165,7 @@ with tab_search:
         # curated set is. Otherwise a fresh page load would try to default-select
         # every company on a platform, which is both what max_selections below
         # is specifically there to prevent, and just a bad default regardless.
-        curated_tokens = {r["token"] for r in registry_rows if not r.get("notes", "").startswith("Bulk-imported")}
+        curated_tokens = {r["token"] for r in registry_rows if not (r.get("notes") or "").startswith("Bulk-imported")}
 
         def _default_for(tokens):
             return [t for t in tokens if t in curated_tokens][:MAX_COMPANIES_PER_PLATFORM]
@@ -180,6 +181,7 @@ with tab_search:
             default=gh_default,
             max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works. Capped so a search can't accidentally try to query thousands of companies at once.",
+            key="greenhouse_boards_select",
         )
         ashby_boards = st.multiselect(
             f"Ashby companies to check ({len(ab_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(ab_registry_tokens)} available)",
@@ -187,6 +189,7 @@ with tab_search:
             default=ab_default,
             max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Includes companies marked 'unknown' platform too — those get tried across all platforms, and the registry below records whichever one actually works. Capped so a search can't accidentally try to query thousands of companies at once.",
+            key="ashby_boards_select",
         )
         gem_boards = st.multiselect(
             f"Gem companies to check ({len(gem_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(gem_registry_tokens)} available)",
@@ -194,6 +197,7 @@ with tab_search:
             default=gem_default,
             max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Gem's API returns listings quickly but not full descriptions — matching jobs get an extra page fetch for the real JD text, so this is a bit slower per match than Greenhouse/Ashby.",
+            key="gem_boards_select",
         )
         lever_boards = st.multiselect(
             f"Lever companies to check ({len(lever_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(lever_registry_tokens)} available)",
@@ -201,6 +205,7 @@ with tab_search:
             default=lever_default,
             max_selections=MAX_COMPANIES_PER_PLATFORM,
             help="Lever doesn't publish a customer list, so these tokens are only as good as whoever last verified them — wrong or stale tokens will just show up as a failed board below.",
+            key="lever_boards_select",
         )
 
         with st.expander("Manage companies (add, edit, verify)"):
@@ -224,8 +229,27 @@ with tab_search:
                 key="company_editor",
             )
             if st.button("Save company changes"):
-                st.session_state.company_registry = edited_rows
-                save_registry(edited_rows)
+                # A newly-added row's blank cells come back as None (not ""),
+                # which broke downstream code elsewhere that assumed these
+                # fields are always strings (e.g. notes.startswith(...)).
+                # Sanitize here, at the point of saving, rather than trying
+                # to defend every place that later reads these fields.
+                sanitized_rows = []
+                for r in edited_rows:
+                    company = (r.get("company") or "").strip()
+                    token = (r.get("token") or "").strip().lower() or company.lower().replace(" ", "")
+                    if not company and not token:
+                        continue  # a fully blank row added but never filled in — skip it
+                    sanitized_rows.append({
+                        "company": company or token,
+                        "token": token,
+                        "platform": (r.get("platform") or "unknown"),
+                        "status": (r.get("status") or "unverified"),
+                        "last_checked": r.get("last_checked") or "",
+                        "notes": r.get("notes") or "",
+                    })
+                st.session_state.company_registry = sanitized_rows
+                save_registry(sanitized_rows)
                 st.success("Saved. Re-open this panel's dropdowns above to see new companies.")
                 st.rerun()
 
@@ -420,7 +444,7 @@ with tab_search:
             if search_meta.get("broadened"):
                 note = f"No Remotive listings matched \"{search_meta['original_query']}\" with the current filters, so I broadened that search"
                 changes = []
-                if search_meta.get("used_query", "").lower() != search_meta.get("original_query", "").lower():
+                if (search_meta.get("used_query") or "").lower() != (search_meta.get("original_query") or "").lower():
                     changes.append(f"query to \"{search_meta['used_query']}\"")
                 if search_meta.get("used_category") is None and category is not None:
                     changes.append("dropped the category restriction")
@@ -534,10 +558,27 @@ with tab_deep_dive:
     st.markdown("Run the full panel on a listing you picked from search results, or paste one directly.")
     manual_url = st.text_input("...or paste a job URL directly", key="manual_url")
 
+    # If the user actively types a new URL, treat that as a clear signal they
+    # want to switch away from a previously-selected search result — without
+    # this, "job" stays set in session_state forever once chosen, and the
+    # if/elif below would keep re-running the old selection no matter what
+    # gets typed here.
+    previous_manual_url = st.session_state.get("_last_manual_url", "")
+    if manual_url and manual_url != previous_manual_url and job:
+        st.session_state.deep_dive_job = None
+        job = None
+    st.session_state["_last_manual_url"] = manual_url
+
     target_job = None
     if job:
         st.info(f"Selected from search: **{job['title']}** at **{job['company']}**")
-        st.link_button("Open listing ↗", job["url"])
+        col_open, col_clear = st.columns([3, 1])
+        with col_open:
+            st.link_button("Open listing ↗", job["url"])
+        with col_clear:
+            if st.button("✕ Clear selection", use_container_width=True):
+                st.session_state.deep_dive_job = None
+                st.rerun()
         target_job = job
     elif manual_url:
         parsed_company, parsed_source = parse_company_and_source_from_url(manual_url)

@@ -13,6 +13,7 @@ is told to leave it alone rather than paper over the gap.
 import json
 import re
 
+from extract import compute_current_role_tenure
 from llm_fallback import call_with_fallback
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
@@ -85,6 +86,33 @@ proof points; a tight 2-sentence summary beats a 3-sentence one padded to
 fill the limit. Keep the same structure (same headers, same roles, same
 companies, same dates) and the same overall length otherwise — this is a
 reordering and rewording pass, not a rewrite.
+
+BULLET QUALITY: when rewording a bullet, follow the shape Action + system/
+scope + tool or approach + outcome + proof — "Resolved X in Y, improving Z,"
+"Built X with Y, enabling Z," "Migrated X to Y, reducing Z," "Improved metric
+from X to Y by Z" are the right shapes. Never open a bullet with a weak,
+passive-sounding verb when the resume shows real ownership: banned openers
+are "helped," "assisted," "responsible for," "worked on," "participated in" —
+replace with the actual verb for what the candidate did (led, built, shipped,
+designed, launched, owned, drove, cut, grew), never invented, always what the
+source resume already supports.
+
+SIX-SECOND CLARITY GATE: the top third of the tailored resume (name, tagline,
+summary) has to make fit for THIS role impossible to miss within about six
+seconds of reading. That means the summary and tagline together must cover:
+the target role/archetype, the single strongest matching skill or domain,
+one concrete production/business outcome (a real number from the resume),
+and location/remote fit only if the JD's location terms make that relevant.
+If a reader would have to hunt through bullets to figure out why this
+candidate fits this specific role, the summary isn't doing its job — rewrite
+it so the fit is stated, not implied.
+
+LOGISTICS: if the JD states a specific location, remote policy, or work-
+authorization requirement that the resume's own facts can speak to (e.g. the
+candidate's stated location, willingness to relocate if that's in the source
+resume), the summary or contact context is the right place to surface it —
+but only using facts already present in the source resume, never invented or
+assumed.
 
 TENURE VS. MILESTONE TIMEFRAMES: a bullet may state how quickly a milestone
 was hit early in a role (e.g., "achieved zero paid marketing spend in first
@@ -290,9 +318,12 @@ def generate_tailored_materials(
     Links (LinkedIn/portfolio/GitHub) are intentionally NOT handled here —
     they're rendered directly into the PDF header by pdf_export.py, not
     written into the letter body by the model."""
+    tenure_note = compute_current_role_tenure(resume_text)
+    tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
+
     user_prompt = f"""RESUME (Markdown, source of truth — do not invent beyond this):
 {resume_text}
-
+{tenure_block}
 JOB LISTING:
 Company: {company}
 Role: {role_title}
@@ -349,7 +380,65 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
             )
             data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
 
+        banned_phrase = _find_banned_phrase(data["cover_letter"])
+        if banned_phrase:
+            data["cover_letter"] = _fix_banned_phrase(
+                data["cover_letter"], banned_phrase, api_key, model, deepseek_api_key
+            )
+            data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
+
     return data
+
+
+# Phrases the prompt already explicitly bans but has been observed slipping
+# through anyway ("I'm drawn to" specifically was reported in real use). This
+# list stays intentionally short — full-sentence phrases the prompt calls out
+# by name as weak, not every word in the larger banned-vocabulary list, since
+# most of those are single words unlikely to need a dedicated rewrite pass.
+_BANNED_PHRASES_NEEDING_REWRITE = [
+    "i'm drawn to",
+    "i am drawn to",
+]
+
+
+def _find_banned_phrase(text: str) -> str:
+    lower_text = text.lower()
+    for phrase in _BANNED_PHRASES_NEEDING_REWRITE:
+        if phrase in lower_text:
+            return phrase
+    return ""
+
+
+def _fix_banned_phrase(cover_letter: str, phrase: str, api_key: str, model: str, deepseek_api_key: str = "") -> str:
+    """Backstop for phrases the prompt already bans by name but that have
+    been observed slipping through anyway — same lesson as the em-dash and
+    word-limit backstops: a prompt instruction is a request, not a
+    guarantee. Unlike em dashes, this isn't a clean character-level swap —
+    deleting "I'm drawn to" outright leaves a broken sentence fragment — so
+    this asks for a real rewrite of just the offending sentence rather than
+    mechanical text surgery."""
+    fix_prompt = f"""This cover letter contains the phrase "{phrase}," which names a feeling
+without giving a concrete reason attached to it — exactly the kind of AI-sounding
+filler this letter should never use. Rewrite ONLY the sentence(s) containing that
+phrase so they state a specific, concrete reason instead (a real detail about the
+role, the company, or a resume-grounded parallel), removing the phrase entirely.
+Leave every other sentence in the letter completely unchanged. Keep every
+formatting rule from before: zero em dashes, no invented metrics.
+
+LETTER:
+{cover_letter}
+
+Respond with ONLY the full corrected letter text, no JSON, no commentary, no markdown fences."""
+
+    text, _provider = call_with_fallback(
+        system_prompt="",
+        user_prompt=fix_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=model,
+        max_tokens=1200,
+        deepseek_api_key=deepseek_api_key,
+    )
+    return text.strip()
 
 
 _SENTENCE_BOUNDARY_RE = re.compile(r"[.!?]+(?=\s|$)")
