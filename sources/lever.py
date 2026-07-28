@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from extract import extract_salary
+from utils.extract import extract_salary
 
 LEVER_URL = "https://api.lever.co/v0/postings/{company}"
 

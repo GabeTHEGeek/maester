@@ -8,7 +8,7 @@ import csv
 import os
 from datetime import datetime
 
-TRACKER_PATH = os.path.join(os.path.dirname(__file__), "tracker.csv")
+TRACKER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tracker.csv")
 
 FIELDS = [
     "timestamp",

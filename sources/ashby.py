@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from extract import extract_salary
+from utils.extract import extract_salary
 
 ASHBY_URL = "https://api.ashbyhq.com/posting-api/job-board/{board}"
 

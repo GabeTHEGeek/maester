@@ -7,10 +7,11 @@ Core logic for Maester: runs a job listing + resume through a simulated
 import json
 import os
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Optional
 
-from llm_fallback import call_with_fallback
+from utils.extract import compute_current_role_tenure
+from engines.llm_fallback import call_with_fallback
 
 
 SYSTEM_PROMPT = """You are a simulated hiring panel evaluating a candidate against a job listing.
@@ -188,9 +189,12 @@ def run_panel(
     deepseek_api_key: str = "",
 ) -> PanelResult:
     """Run the job listing + resume through the panel and return a PanelResult."""
+    tenure_note = compute_current_role_tenure(resume_text)
+    tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
+
     user_prompt = f"""RESUME:
 {resume_text}
-
+{tenure_block}
 JOB LISTING:
 Company: {company}
 Role: {role_title}

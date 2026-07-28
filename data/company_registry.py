@@ -13,7 +13,7 @@ import csv
 import os
 from datetime import datetime
 
-REGISTRY_PATH = os.path.join(os.path.dirname(__file__), "companies.csv")
+REGISTRY_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "companies.csv")
 
 FIELDS = ["company", "token", "platform", "status", "last_checked", "notes"]
 

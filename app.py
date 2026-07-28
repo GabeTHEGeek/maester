@@ -12,24 +12,24 @@ import tempfile
 
 import streamlit as st
 
-import job_source
-import job_source_ashby
-import job_source_gem
-import job_source_greenhouse
-import job_source_lever
-from company_registry import add_company, load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
-from resolve import resolve_cross_platform
-from dedup import load_seen_urls, record_scans
-from email_notify import build_deep_dive_summary, send_summary_email
-from extract import extract_salary, format_published_date, parse_company_and_source_from_url
-from freshness import compute_freshness
-from fetch_job import check_liveness, fetch_job_page, fetch_job_text
-from job_source import search_jobs
-from panel_engine import run_panel
-from pdf_export import render_cover_letter_pdf, render_resume_pdf
-from rubric_engine import batch_score, quick_score_from_cache
-from tailor_engine import generate_tailored_materials
-from tracker import load_all, log_result
+import sources.ashby as job_source_ashby
+import sources.gem as job_source_gem
+import sources.greenhouse as job_source_greenhouse
+import sources.lever as job_source_lever
+import sources.remotive as job_source
+from data.company_registry import add_company, load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
+from utils.resolve import resolve_cross_platform
+from data.dedup import load_seen_urls, record_scans
+from utils.email_notify import build_deep_dive_summary, send_summary_email
+from utils.extract import extract_salary, format_published_date, parse_company_and_source_from_url
+from utils.freshness import compute_freshness
+from utils.fetch_job import check_liveness, fetch_job_page, fetch_job_text
+from sources.remotive import search_jobs
+from engines.panel import run_panel
+from utils.pdf_export import render_cover_letter_pdf, render_resume_pdf
+from engines.rubric import batch_score, quick_score_from_cache
+from engines.tailor import generate_tailored_materials
+from data.tracker import load_all, log_result
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 

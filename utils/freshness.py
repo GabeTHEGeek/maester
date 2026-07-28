@@ -14,7 +14,7 @@ applicant matters the same amount regardless of level. Only the back half
 
 from datetime import datetime, timezone
 
-from extract import _parse_published
+from utils.extract import _parse_published
 
 _SENIORITY_KEYWORDS = {
     "executive": ["principal", "director", "vp", "vice president", "head of", "chief", "group product manager"],

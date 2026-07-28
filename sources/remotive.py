@@ -11,7 +11,7 @@ import re
 
 import requests
 
-from extract import extract_salary
+from utils.extract import extract_salary
 
 REMOTIVE_URL = "https://remotive.com/api/remote-jobs"
 

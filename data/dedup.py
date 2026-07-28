@@ -13,7 +13,7 @@ import csv
 import os
 from datetime import datetime
 
-SCAN_HISTORY_PATH = os.path.join(os.path.dirname(__file__), "scan_history.csv")
+SCAN_HISTORY_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scan_history.csv")
 
 FIELDS = [
     "url",

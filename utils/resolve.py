@@ -9,10 +9,10 @@ working set as you use it, rather than spending ~15,000+ requests up front
 resolving companies you may never search.
 """
 
-from job_source_ashby import search_ashby
-from job_source_gem import search_gem
-from job_source_greenhouse import search_greenhouse
-from job_source_lever import search_lever
+from sources.ashby import search_ashby
+from sources.gem import search_gem
+from sources.greenhouse import search_greenhouse
+from sources.lever import search_lever
 
 _SEARCH_FUNCS = {
     "greenhouse": search_greenhouse,

@@ -13,8 +13,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from extract import compute_current_role_tenure
-from llm_fallback import call_with_fallback
+from utils.extract import compute_current_role_tenure
+from engines.llm_fallback import call_with_fallback
 
 QUICK_MODEL = "claude-haiku-4-5-20251001"
 

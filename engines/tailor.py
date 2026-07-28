@@ -13,8 +13,8 @@ is told to leave it alone rather than paper over the gap.
 import json
 import re
 
-from extract import compute_current_role_tenure
-from llm_fallback import call_with_fallback
+from utils.extract import compute_current_role_tenure
+from engines.llm_fallback import call_with_fallback
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
 

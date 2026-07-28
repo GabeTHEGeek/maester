@@ -11,6 +11,17 @@ one extra HTTP request per matching job (not per job on the board — title
 filtering happens first, on the cheap listing call), which is the same
 tradeoff Greenhouse/Ashby avoid by including full content in one call, but
 Gem's API doesn't offer that.
+
+Deliberately NOT using Gem's official, documented REST API
+(api.gem.com/job_board/v0/{vanity_url_path}/job_posts/) — per Gem's own
+help docs, that endpoint requires the employer's own account to have the
+Gem ATS feature enabled and an API key provisioned by that employer's own
+admin. It's built for a company to pull its own postings to embed on its
+own site, not for a third party to query arbitrary companies' postings
+without ever holding their private credentials, which is exactly what
+Maester would need to do here. Scraping the public-facing careers page
+instead (jobs.gem.com/{company}, the same page a candidate would browse to)
+needs no credentials at all, because it isn't the private API.
 """
 
 import re
@@ -18,8 +29,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from extract import extract_salary
-from fetch_job import fetch_job_text
+from utils.extract import extract_salary
+from utils.fetch_job import fetch_job_text
 
 GEM_GRAPHQL_URL = "https://jobs.gem.com/api/public/graphql/batch"
 

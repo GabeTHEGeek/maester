@@ -24,7 +24,7 @@ lets a real search resolve it instead of trusting either list blindly.
 import argparse
 import json
 
-from company_registry import load_registry, save_registry
+from data.company_registry import load_registry, save_registry
 
 
 def _title_case(token: str) -> str:

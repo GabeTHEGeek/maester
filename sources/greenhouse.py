@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from extract import extract_salary
+from utils.extract import extract_salary
 
 GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs"
 
