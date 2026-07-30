@@ -10,7 +10,10 @@ import os
 import re
 import tempfile
 
+from dotenv import load_dotenv
 import streamlit as st
+
+load_dotenv()
 
 import sources.ashby as job_source_ashby
 import sources.gem as job_source_gem
@@ -92,9 +95,9 @@ with st.sidebar:
     st.divider()
     st.subheader("Links (optional)")
     st.caption("Included as hyperlinks in the header of both the tailored resume and cover letter, when provided.")
-    linkedin_url = st.text_input("LinkedIn URL", value="")
-    portfolio_url = st.text_input("Portfolio URL", value="")
-    github_url = st.text_input("GitHub URL", value="")
+    linkedin_url = st.text_input("LinkedIn URL", value=os.environ.get("LINKEDIN_URL", ""))
+    portfolio_url = st.text_input("Portfolio URL", value=os.environ.get("PORTFOLIO_URL", ""))
+    github_url = st.text_input("GitHub URL", value=os.environ.get("GITHUB_URL", ""))
 
     st.divider()
     with st.expander("Email notifications (optional)"):
