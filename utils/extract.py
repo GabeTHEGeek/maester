@@ -136,6 +136,47 @@ _CURRENT_ROLE_DATE_RE = re.compile(
 )
 
 
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_PHONE_RE = re.compile(r"(\+?\d[\d ().-]{7,}\d)")
+
+
+def parse_contact_info(resume_text: str) -> dict:
+    """Pulls name/email/phone/location out of the resume's own header, the
+    same two lines pdf_export.py already treats as the name line ("# Name")
+    and the contact line right below it ("Location | Phone | Email"). Reuses
+    the resume as the single source of truth instead of asking for these
+    separately, consistent with the no-invention rule elsewhere in the app —
+    contact info comes from what the candidate actually wrote, never guessed.
+    Returns '' for any field it can't confidently find rather than guessing."""
+    lines = [line.strip() for line in resume_text.splitlines() if line.strip()]
+    name = ""
+    contact_line = ""
+
+    for i, line in enumerate(lines):
+        if line.startswith("# "):
+            name = line[2:].strip()
+            if i + 1 < len(lines):
+                contact_line = lines[i + 1]
+            break
+
+    email_match = _EMAIL_RE.search(contact_line)
+    email = email_match.group(0) if email_match else ""
+
+    phone = ""
+    phone_match = _PHONE_RE.search(contact_line)
+    if phone_match:
+        phone = phone_match.group(0).strip()
+
+    location = ""
+    parts = [p.strip() for p in contact_line.split("|")]
+    for part in parts:
+        if part and part != email and not _PHONE_RE.fullmatch(part):
+            location = part
+            break
+
+    return {"name": name, "email": email, "phone": phone, "location": location}
+
+
 def compute_current_role_tenure(resume_text: str) -> str:
     """Finds the first role dated through 'Present' and computes real elapsed
     tenure from its start date to today. Handing the model this as a stated

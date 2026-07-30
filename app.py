@@ -24,7 +24,7 @@ from data.company_registry import add_company, load_registry, mark_failed_all, r
 from utils.resolve import resolve_cross_platform
 from data.dedup import load_seen_urls, record_scans
 from utils.email_notify import build_deep_dive_summary, send_summary_email
-from utils.extract import extract_salary, format_published_date, parse_company_and_source_from_url
+from utils.extract import extract_salary, format_published_date, parse_company_and_source_from_url, parse_contact_info
 from utils.freshness import compute_freshness
 from utils.fetch_job import check_liveness, fetch_job_page, fetch_job_text
 from sources.remotive import search_jobs
@@ -33,6 +33,8 @@ from utils.pdf_export import render_cover_letter_pdf, render_resume_pdf
 from engines.rubric import batch_score, quick_score_from_cache
 from engines.tailor import generate_tailored_materials
 from data.tracker import load_all, log_result
+from browser.autofill import open_and_fill
+from data.fill_log import log_fill_attempt
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 
@@ -856,8 +858,68 @@ with tab_deep_dive:
                                 file_name=f"cover_letter_{safe_company}.pdf",
                                 mime="application/pdf",
                             )
+
+                        # Persisted so the Apply button below (a separate
+                        # rerun) can still find these paths.
+                        st.session_state.resume_pdf_path = resume_pdf_path
+                        st.session_state.cover_pdf_path = cover_pdf_path
                     except Exception as e:
                         st.error(f"PDF rendering failed: {e}")
+
+            resume_pdf_path = st.session_state.get("resume_pdf_path")
+            cover_pdf_path = st.session_state.get("cover_pdf_path")
+            if resume_pdf_path and cover_pdf_path:
+                st.divider()
+                st.markdown("#### Apply")
+                st.caption(
+                    "Opens the real application page in a visible browser, checks it's still live, "
+                    "and fills in your contact info, tailored resume, cover letter, and custom "
+                    "question answers. It never clicks submit — you review the filled page and do "
+                    "that yourself."
+                )
+                if st.button("Open application & auto-fill"):
+                    with st.spinner("Checking the listing and opening a browser..."):
+                        contact_info = parse_contact_info(resume_text)
+                        links = {
+                            "linkedin_url": linkedin_url,
+                            "portfolio_url": portfolio_url,
+                            "github_url": github_url,
+                        }
+                        fill_result = open_and_fill(
+                            url=result.job_url,
+                            resume_text=resume_text,
+                            company=result.company,
+                            role_title=result.role_title,
+                            contact_info=contact_info,
+                            links=links,
+                            resume_pdf_path=resume_pdf_path,
+                            cover_letter_pdf_path=cover_pdf_path,
+                            api_key=api_key,
+                            deepseek_api_key=deepseek_api_key,
+                        )
+
+                    if fill_result.status == "dead":
+                        st.error(f"This posting looks closed, so nothing was opened. {fill_result.reason}")
+                    elif fill_result.status == "error":
+                        st.error(fill_result.reason)
+                    else:
+                        log_fill_attempt(
+                            company=result.company,
+                            role_title=result.role_title,
+                            url=result.job_url,
+                            fields_auto_mapped=fill_result.fields_auto_mapped,
+                            fields_flagged=fill_result.fields_flagged,
+                        )
+                        st.success(
+                            "Browser opened and filled. Review it yourself, especially anything "
+                            "flagged below, then submit it on your own."
+                        )
+                        if fill_result.reason:
+                            st.warning(fill_result.reason)
+                        if fill_result.fields_auto_mapped:
+                            st.caption("Auto-filled: " + ", ".join(fill_result.fields_auto_mapped))
+                        if fill_result.fields_flagged:
+                            st.warning("Needs your attention: " + ", ".join(fill_result.fields_flagged))
 
 # ---------------------------------------------------------------------------
 # TAB 3: Dashboard — everything you've deep-dived on, logged locally.

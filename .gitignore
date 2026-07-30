@@ -5,8 +5,11 @@ tracker.csv
 tracker_old.csv
 scan_history.csv
 scan_history_old.csv
+fill_log.csv
+fill_log_old.csv
 PROJECT_SUMMARY.md
 .streamlit/secrets.toml
 venv/
 sample_data/resume.md
+sample_data/answer_bank.json
 CLAUDE.md
