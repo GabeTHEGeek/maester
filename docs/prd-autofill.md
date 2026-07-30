@@ -40,13 +40,13 @@ touching the one step that actually matters.
 
 ## User story
 
-Gabriel has already run a listing through Deep Dive and Tailor & Export.
-From that same screen, he clicks "Apply." A visible browser window opens
-the real application page, checks it's still live, fills in his contact
+The user has already run a listing through Deep Dive and Tailor & Export.
+From that same screen, they click "Apply." A visible browser window opens
+the real application page, checks it's still live, fills in their contact
 info, uploads the tailored resume and cover letter, and answers custom
-questions — either reusing something he's already written and approved, or
-drafting something new for review. The browser then sits open, fully
-filled, waiting for him. He reviews it and clicks submit himself.
+questions — either reusing something they've already written and approved,
+or drafting something new for review. The browser then sits open, fully
+filled, waiting for them. They review it and click submit themselves.
 
 ## Functional requirements
 
@@ -185,12 +185,12 @@ filled, waiting for him. He reviews it and clicks submit himself.
    form (which has separate "First Name*" / "Last Name*" boxes, the common
    case) surfaced another silent-wrong-fill bug: the field-mapping prompt
    only had a single "name" category, so the model mapped both boxes to it,
-   and the code filled the full "Gabriel Pendleton" string into both —
+   and the code filled the full "First Last" name string into both —
    auto-mapped, unflagged, wrong. Fixed by adding explicit `first_name` /
    `last_name` categories to the prompt (with an instruction to never
    default to "name" when two separate boxes exist), and splitting
    `contact_info["name"]` on the first space at fill time. Verified
-   directly by reading back the filled values: "Gabriel" and "Pendleton"
+   directly by reading back the filled values: first and last name each
    land in their correct respective fields, not the full name in both.
 7. **Custom dropdown widgets — resolved: click the matching visible option
    after filling, don't trust `.fill()` alone.** Real-world testing found
@@ -209,8 +209,45 @@ filled, waiting for him. He reviews it and clicks submit himself.
    not a real user-facing field) was showing up in the field scan with no
    label, confusing the mapping step - `_SCAN_FIELDS_JS` now excludes any
    `aria-hidden="true"` element outright.
+8. **Answer-crafting workflow — resolved: ingest a listing's questions
+   first, then craft answers, then fill.** Manually reverse-engineering
+   exact keyword phrases from a raw HTML/field dump for every listing was
+   slow and exactly how the keyword-collision bugs (#5) happened in the
+   first place. Added `browser.autofill.scan_questions(url, api_key,
+   deepseek_api_key)`: runs the same liveness-check → reveal-click → field-
+   scan → LLM-mapping pipeline as `open_and_fill`, but only returns the
+   `custom_question`-categorized questions' verbatim text — no filling, no
+   browser left open. The discovery logic itself was factored out into a
+   shared `_discover_and_map()` used by both functions, so a fix to one
+   (e.g. the reveal-click hardening) automatically applies to the other
+   instead of needing to be duplicated. Verified on a live Reddit listing:
+   returned exactly the 4 real open-ended questions, correctly excluding
+   "Country"/"Location" (now their own categories) and the privacy-consent
+   checkbox (correctly left to `skip`).
+9. **Answer bank matching — resolved: exact question-text match first,
+   keyword overlap only as a fallback.** The keyword-only approach (fixed
+   in #5, but only patched, not redesigned) is inherently collision-prone
+   for company-specific compliance questions, which is exactly where the
+   real bug occurred. `find_answer()` now tries an exact, normalized match
+   on a new `question_text` field first (deterministic, zero collision
+   risk — the intended pairing with `scan_questions()`'s verbatim output),
+   and only falls back to the keyword-overlap tier (still gated at
+   `_MIN_KEYWORD_HITS = 2`) for genuinely reusable general questions ("why
+   this company") that get worded differently across employers and will
+   never land an exact match. Verified both tiers resolve correctly and
+   independently.
+10. **Demographic/EEO self-identification and consent checkboxes — already
+    handled correctly, confirmed on a real listing.** Reddit's application
+    includes gender identity, transgender experience, sexual orientation,
+    disability status, veteran status, ethnicity, and a separate consent
+    checkbox for that data. All landed in `skip` with no fill attempt at
+    all (not even a flagged draft) — the field-mapping prompt's existing
+    "consent/EEO/self-identification fields" skip instruction held up
+    without needing any change. Worth naming as a deliberate non-goal, not
+    an oversight: this tool will not guess or draft answers to
+    demographic self-identification questions, full stop.
 
 ## Open questions
 
-None remaining as of this draft. All seven forks raised across drafting and
+None remaining as of this draft. All ten forks raised across drafting and
 real-world testing are resolved above.

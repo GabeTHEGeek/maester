@@ -223,9 +223,9 @@ Valid categories:
   two separate name fields are present.
 - "name" - ONLY for a single field meant to hold the candidate's whole name
   at once (rare - most forms split first/last).
-- "email", "phone", "country" - standard contact fields ("country" means
-  country of residence, e.g. for an address section - not a work-
-  authorization or visa question, those are "custom_question")
+- "email", "phone", "country", "city" - standard contact fields ("country"
+  and "city" mean location of residence, e.g. an address section - not a
+  work-authorization or visa question, those are "custom_question")
 - "linkedin_url", "portfolio_url", "github_url" - profile link fields
 - "resume_upload" - a file input for a resume/CV
 - "cover_letter_upload" - a file input for a cover letter
@@ -308,33 +308,34 @@ def _fill_field(page, locator, value: str) -> None:
         pass  # plain text field, or no matching option - the .fill() above already stands
 
 
-def open_and_fill(
-    url,
-    resume_text,
-    company,
-    role_title,
-    contact_info,
-    links,
-    resume_pdf_path,
-    cover_letter_pdf_path,
-    api_key,
-    deepseek_api_key="",
-    session_key=None,
-):
-    """Pre-flight liveness check, then opens a visible browser on `url`, maps
-    its fields via an LLM call, fills in what it confidently can, drafts and
-    flags answers to genuinely new custom questions, and stops. The browser
-    is left open and untouched at that final state - nothing in this
-    function, or anything it calls, submits the form. See module docstring.
-    """
+class _DiscoveryResult:
+    def __init__(self, status, reason="", reveal_clicked=False, playwright=None, browser=None, page=None, raw_fields=None, mapping=None):
+        self.status = status  # "ok" | "dead" | "error" | "no_fields" | "mapping_failed"
+        self.reason = reason
+        self.reveal_clicked = reveal_clicked
+        self.playwright = playwright
+        self.browser = browser
+        self.page = page
+        self.raw_fields = raw_fields or []
+        self.mapping = mapping or []
+
+
+def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
+    """Shared first half of both open_and_fill and scan_questions: liveness
+    check, open a visible browser, click the 'Apply' reveal control if one
+    is safely identifiable, scan the resulting fields, and map them via the
+    same LLM call. Split out so scanning a listing's questions (no filling,
+    no browser left open) and actually filling it don't duplicate this
+    logic, and so a fix to one (e.g. the reveal-click hardening) automatically
+    applies to both."""
     try:
         page_data = fetch_job_page(url)
     except Exception as e:
-        return FillResult(status="error", reason=f"Couldn't reach the listing: {e}")
+        return _DiscoveryResult(status="error", reason=f"Couldn't reach the listing: {e}")
 
     liveness = check_liveness(page_data["text"], page_data["final_url"])
     if liveness["status"] == "expired":
-        return FillResult(status="dead", reason=liveness["reason"])
+        return _DiscoveryResult(status="dead", reason=liveness["reason"])
 
     playwright = sync_playwright().start()
     browser = playwright.chromium.launch(headless=False)
@@ -374,8 +375,11 @@ def open_and_fill(
     if not raw_fields:
         reason = "No fillable fields detected on this page"
         reason += " (clicked 'Apply' to reveal the form, but still found none)" if reveal_clicked else ""
-        reason += " - likely a custom or JS-heavy form. Left open for manual review."
-        return FillResult(status="opened", reason=reason, reveal_clicked=reveal_clicked)
+        reason += " - likely a custom or JS-heavy form."
+        return _DiscoveryResult(
+            status="no_fields", reason=reason, reveal_clicked=reveal_clicked,
+            playwright=playwright, browser=browser, page=pw_page,
+        )
 
     mapping_prompt = "FORM FIELDS (JSON):\n" + json.dumps(raw_fields, indent=2)
     try:
@@ -389,14 +393,90 @@ def open_and_fill(
         )
         mapping = _extract_json(mapping_text).get("fields", [])
     except Exception as e:
-        # Mapping failure: partial fill with flags, not a bail-out (PRD
-        # decision #3) - every field just gets flagged since none were mapped.
+        return _DiscoveryResult(
+            status="mapping_failed", reason=f"Field mapping failed ({e}).", reveal_clicked=reveal_clicked,
+            playwright=playwright, browser=browser, page=pw_page, raw_fields=raw_fields,
+        )
+
+    return _DiscoveryResult(
+        status="ok", reveal_clicked=reveal_clicked,
+        playwright=playwright, browser=browser, page=pw_page,
+        raw_fields=raw_fields, mapping=mapping,
+    )
+
+
+def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
+    """Ingests a listing's actual custom questions WITHOUT filling anything
+    and without leaving a browser open - a lightweight preview step so
+    answers can be crafted deliberately (reviewed, or handed to the user for
+    real facts) before any fill attempt, instead of reverse-engineering
+    field text from a live page under time pressure each time. Returns
+    {"status", "reason", "questions": [{"question_text", "field_label"}]}.
+    """
+    discovery = _discover_and_map(url, api_key, deepseek_api_key, session_key=f"scan-{session_key or url}")
+
+    questions = []
+    if discovery.status == "ok":
+        for entry in discovery.mapping:
+            if entry.get("category") != "custom_question":
+                continue
+            index = entry.get("index")
+            field_label = next(
+                (f.get("label_text") or f.get("name") or f"field #{index}" for f in discovery.raw_fields if f["index"] == index),
+                f"field #{index}",
+            )
+            questions.append({"question_text": entry.get("question_text") or field_label, "field_label": field_label})
+
+    # Scanning is preview-only - always close the browser it opened, unlike
+    # open_and_fill which deliberately leaves it open for review.
+    if discovery.page is not None:
+        try:
+            discovery.browser.close()
+            discovery.playwright.stop()
+        except Exception:
+            pass
+        _LIVE_SESSIONS.pop(f"scan-{session_key or url}", None)
+
+    return {"status": discovery.status, "reason": discovery.reason, "questions": questions}
+
+
+def open_and_fill(
+    url,
+    resume_text,
+    company,
+    role_title,
+    contact_info,
+    links,
+    resume_pdf_path,
+    cover_letter_pdf_path,
+    api_key,
+    deepseek_api_key="",
+    session_key=None,
+):
+    """Pre-flight liveness check, then opens a visible browser on `url`, maps
+    its fields via an LLM call, fills in what it confidently can, drafts and
+    flags answers to genuinely new custom questions, and stops. The browser
+    is left open and untouched at that final state - nothing in this
+    function, or anything it calls, submits the form. See module docstring.
+    """
+    discovery = _discover_and_map(url, api_key, deepseek_api_key, session_key=session_key)
+
+    if discovery.status in ("dead", "error"):
+        return FillResult(status=discovery.status, reason=discovery.reason)
+    if discovery.status == "no_fields":
+        return FillResult(status="opened", reason=discovery.reason + " Left open for manual review.", reveal_clicked=discovery.reveal_clicked)
+    if discovery.status == "mapping_failed":
         return FillResult(
             status="opened",
-            reason=f"Field mapping failed ({e}). Every field left for manual review.",
-            fields_flagged=[f.get("label_text") or f.get("name") or f"field #{f['index']}" for f in raw_fields],
-            reveal_clicked=reveal_clicked,
+            reason=discovery.reason + " Every field left for manual review.",
+            fields_flagged=[f.get("label_text") or f.get("name") or f"field #{f['index']}" for f in discovery.raw_fields],
+            reveal_clicked=discovery.reveal_clicked,
         )
+
+    pw_page = discovery.page
+    raw_fields = discovery.raw_fields
+    mapping = discovery.mapping
+    reveal_clicked = discovery.reveal_clicked
 
     auto_mapped = []
     flagged = []
@@ -433,6 +513,9 @@ def open_and_fill(
                 auto_mapped.append(field_label)
             elif category == "country" and contact_info.get("country"):
                 _fill_field(pw_page, locator, contact_info["country"])
+                auto_mapped.append(field_label)
+            elif category == "city" and contact_info.get("city"):
+                _fill_field(pw_page, locator, contact_info["city"])
                 auto_mapped.append(field_label)
             elif category == "linkedin_url" and links.get("linkedin_url"):
                 _fill_field(pw_page, locator, links["linkedin_url"])
