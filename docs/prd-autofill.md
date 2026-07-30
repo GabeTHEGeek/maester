@@ -236,18 +236,77 @@ filled, waiting for them. They review it and click submit themselves.
    this company") that get worded differently across employers and will
    never land an exact match. Verified both tiers resolve correctly and
    independently.
-10. **Demographic/EEO self-identification and consent checkboxes — already
-    handled correctly, confirmed on a real listing.** Reddit's application
-    includes gender identity, transgender experience, sexual orientation,
-    disability status, veteran status, ethnicity, and a separate consent
-    checkbox for that data. All landed in `skip` with no fill attempt at
-    all (not even a flagged draft) — the field-mapping prompt's existing
-    "consent/EEO/self-identification fields" skip instruction held up
-    without needing any change. Worth naming as a deliberate non-goal, not
-    an oversight: this tool will not guess or draft answers to
-    demographic self-identification questions, full stop.
+10. **Demographic/EEO self-identification and consent checkboxes — resolved:
+    a dedicated `demographic_question` category, bank-lookup only, never
+    drafted; consent checkboxes explicitly opt-in per-field.** Initially
+    these correctly landed in `skip` with no fill attempt at all (the
+    default, safest behavior). The user was then asked directly, per
+    question, and explicitly chose two things: (a) provide real answers
+    once as permanent, reusable facts (stored in `sample_data/answer_bank.json`,
+    gitignored, same as the resume) rather than re-answering on every
+    application, and (b) auto-check the general privacy-policy consent
+    checkbox specifically, after being told exactly what it means. Added
+    `demographic_question` as its own category, structurally distinct from
+    `custom_question`: it ONLY ever fills from an exact bank match and
+    NEVER falls through to `_draft_custom_answer` - a resume has no basis
+    to state someone's gender identity, ethnicity, disability, or veteran
+    status, so unlike a general custom question, guessing here would mean
+    fabricating identity facts, not just missing one. Added
+    `consent_checkbox` as a separate category (real `.check()` first,
+    falling back to the same click-and-select path as everything else if
+    the "checkbox" turns out to be a combobox instead - confirmed directly
+    that Reddit's general consent field is exactly that). Both categories
+    remain opt-in per field the user explicitly approves, not a default.
+11. **Combobox fill reliability — resolved: click before fill, and exclude
+    intl-tel-input's own options from the search.** Testing the
+    demographic-answer reuse on Reddit surfaced two compounding bugs in
+    `_fill_field` (the fix from #7 was necessary but not sufficient): (a)
+    `.fill()` alone doesn't reliably make react-select render its own
+    option list - it needs a real `.click()` first to open the menu, the
+    same interaction a human would do; (b) on any form that also has a
+    phone field using the `intl-tel-input` library (confirmed on Reddit's
+    form), that library keeps its own full country list in the DOM with
+    `role="option"` at all times, regardless of which field is actually
+    being filled - an unscoped option search silently grabbed an entry from
+    the wrong widget entirely. Fixed by clicking before filling, and
+    excluding any option element whose id starts with `"iti-"`. Verified
+    directly, not just assumed: after the fix, both the Country field and
+    the consent combobox show `aria-expanded="false"` (menu closed) AND
+    their visible input clears back to empty - the correct react-select
+    behavior when a real selection commits, replacing the raw typed text
+    rather than leaving it sitting unregistered in the box.
+12. **Silent no-op fills — resolved: `_fill_field` now returns a real
+    success/failure signal, and callers must check it.** The #11 fix wasn't
+    the whole story. The user caught it directly from a screenshot: all six
+    demographic dropdowns still showed their "Select..." placeholder despite
+    being reported as successfully auto-mapped. Root cause: the stored
+    answer's exact wording didn't match what this specific employer's form
+    actually offered (e.g. saved "Man" against a real option list of
+    "Male"/"Female"/"Non-binary"/etc. - "Man" matched nothing). `_fill_field`
+    had no way to signal that failure - it filled raw text, found no
+    matching option, and returned nothing, so every call site kept
+    unconditionally reporting success. Fixed on two levels: (a) `_fill_field`
+    now returns `True` only when either no option menu ever appears (an
+    ordinary text field, where the plain `.fill()` is genuinely the right
+    answer) or a real matching option gets clicked; it returns `False` when
+    a menu opens but nothing in it matches, and every call site in the fill
+    loop now branches on that return value into auto-mapped vs. flagged
+    instead of assuming success; (b) the six stored demographic answers were
+    corrected to the form's actual exact option text (confirmed by opening
+    each dropdown directly and reading its real options - "Man" -> "Male",
+    "Heterosexual/Straight" -> "Heterosexual", "I am not a protected
+    veteran" -> "No military service", the closest option this specific
+    form actually offers for non-veteran status). Re-verified independently
+    per field afterward (not just trusting the aggregate result this time):
+    all six now show `aria-expanded="false"` and a cleared input for the
+    correct value - the real committed-selection signature. The broader
+    lesson, worth stating plainly: a stored answer bank entry is only as
+    good as its exact match against a given employer's specific option
+    wording, and every employer phrases these differently - this will keep
+    happening on new listings and needs the same fix-and-verify treatment
+    each time, not a one-time patch.
 
 ## Open questions
 
-None remaining as of this draft. All ten forks raised across drafting and
+None remaining as of this draft. All twelve forks raised across drafting and
 real-world testing are resolved above.

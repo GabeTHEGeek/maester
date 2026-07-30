@@ -47,6 +47,14 @@ is clicked, typed text alone doesn't commit a selection. This is part of
 *filling* a field the caller already decided to fill, not a new capability
 boundary - it only ever clicks an option matching the exact value already
 being filled, never a button, link, or anything resembling submission.
+
+A fourth uses `.check()` on checkboxes explicitly categorized as
+"consent_checkbox" (agreeing to the employer's privacy policy / data
+processing as part of applying - never a marketing opt-in or anything else,
+per the field-mapping prompt) - this is real, informed opt-in, done here
+only because the user explicitly chose to auto-check it after being told
+exactly what it means; it is still not a submit action and does not send
+anything anywhere by itself.
 """
 
 import json
@@ -212,7 +220,7 @@ _FLAG_BANNER_JS = """
 FIELD_MAPPING_SYSTEM_PROMPT = """You map a job application form's raw fields to a
 known set of categories, using each field's tag, type, name, placeholder, and
 label text. Respond ONLY with valid JSON, no markdown fences, no prose:
-{"fields": [{"index": <int>, "category": "<category>", "question_text": "<only for custom_question, the actual question being asked, verbatim from the label>"}]}
+{"fields": [{"index": <int>, "category": "<category>", "question_text": "<only for custom_question and demographic_question, the actual question being asked, verbatim from the label>"}]}
 
 Valid categories:
 - "first_name", "last_name" - use these, NOT "name", whenever first and last
@@ -229,10 +237,20 @@ Valid categories:
 - "linkedin_url", "portfolio_url", "github_url" - profile link fields
 - "resume_upload" - a file input for a resume/CV
 - "cover_letter_upload" - a file input for a cover letter
+- "demographic_question" - voluntary EEO/self-identification questions
+  (gender identity, transgender experience, sexual orientation, disability
+  status, veteran status, race/ethnicity). Distinct from "custom_question"
+  on purpose: these are only ever filled from a pre-approved saved answer,
+  NEVER freshly drafted, since a resume has no basis to state a person's
+  identity and guessing would mean fabricating it.
+- "consent_checkbox" - a checkbox agreeing to the employer's privacy policy
+  or to processing of the candidate's own application/survey data as part
+  of applying. NOT a marketing-email opt-in or anything unrelated to the
+  application itself - if genuinely unsure which this is, use "skip".
 - "custom_question" - a free-text question the candidate needs to answer
   (why this company, tools comfort, availability, a behavioral prompt, etc.)
-- "skip" - anything else: unrelated fields, dropdowns, checkboxes, consent/
-  EEO/self-identification fields, anything you're not confident about
+- "skip" - anything else: unrelated fields, dropdowns, checkboxes,
+  anything you're not confident about
 
 Only ever return "skip" if uncertain - a wrong guess on a mapped field fills
 the wrong data into a stranger's application, which is worse than leaving a
@@ -289,23 +307,67 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
     return text.strip()
 
 
-def _fill_field(page, locator, value: str) -> None:
+def _fill_field(page, locator, value: str) -> bool:
     """Fills a value into a field, then checks whether a react-select-style
     option listbox appeared (elements with role="option") and clicks the one
     matching `value` if so. Confirmed directly this matters: a plain
     `.fill()` on a live Greenhouse "Country" combobox set the visible text
     but never actually registered a selection - these widgets only commit a
-    value when a real option is clicked, typed text alone doesn't do it. A
-    no-op for ordinary text inputs, since no options ever appear for those,
-    so this is safe to use as the default fill path everywhere, not just for
-    fields already known to be comboboxes."""
+    value when a real option is clicked, typed text alone doesn't do it.
+
+    Returns True if the fill can be trusted, False if it can't - the caller
+    must check this and flag rather than auto-map on False. Confirmed
+    directly this distinction matters, not just theoretical: a stored
+    answer of "Man" against a live Reddit gender-identity dropdown whose
+    real options were "Male"/"Female"/"Non-binary"/etc. left "Man" sitting
+    as raw typed text in the box - no option matched, nothing was actually
+    selected, yet the old version of this function had no way to signal
+    that failure, so the caller reported the field as successfully filled
+    when it plainly wasn't (visually confirmed: the field still showed its
+    "Select..." placeholder). Three cases:
+    - No option menu ever appears at all -> True (an ordinary text field;
+      the plain .fill() above is the correct, complete answer).
+    - A menu appears and one option matches `value` -> True, after clicking
+      the real option (see the two fixes below for why this needs care).
+    - A menu appears but NOTHING matches `value` -> False. This is the
+      "Man" vs "Male" case: the stored answer's exact wording doesn't match
+      what this particular employer's form actually offers. Leaving typed,
+      unregistered text in the box and calling it success is worse than
+      flagging it, since a form validation pass may silently accept
+      whatever text is present without it ever being a real selection.
+
+    Two things confirmed directly on a live Reddit application form, both
+    needed for the True cases above to actually work rather than silently
+    doing nothing or grabbing the wrong element entirely:
+    - `.click()` before `.fill()`: react-select doesn't reliably render its
+      own option list from `.fill()` alone (which sets the DOM value without
+      the focus/open interaction a real user click produces) - clicking
+      first is what actually opens the menu.
+    - Excluding intl-tel-input's own option elements (id starts with
+      "iti-"): that phone-number country-code picker keeps its full country
+      list in the DOM with `role="option"` at all times, on forms that
+      happen to also have a phone field with this widget, regardless of
+      which unrelated field is being filled. An unscoped option search on
+      such a form silently matches the wrong widget's option (confirmed: a
+      completely unrelated field's fill briefly appeared to click the
+      country dial-code list's "United States" entry instead of its own).
+    """
+    locator.click()
     locator.fill(value)
+
+    options = page.locator('[role="option"]:not([id^="iti-"])')
     try:
-        option = page.locator('[role="option"]').filter(has_text=value).first
-        option.wait_for(state="visible", timeout=1500)
-        option.click()
+        options.first.wait_for(state="visible", timeout=1200)
     except Exception:
-        pass  # plain text field, or no matching option - the .fill() above already stands
+        return True  # no menu ever appeared - ordinary text field, .fill() stands as-is
+
+    matching = options.filter(has_text=value)
+    try:
+        matching.first.wait_for(state="visible", timeout=800)
+        matching.first.click()
+        return True
+    except Exception:
+        return False  # a menu opened, but nothing in it matched - don't trust the raw typed text
 
 
 class _DiscoveryResult:
@@ -406,26 +468,36 @@ def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
 
 
 def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
-    """Ingests a listing's actual custom questions WITHOUT filling anything
-    and without leaving a browser open - a lightweight preview step so
-    answers can be crafted deliberately (reviewed, or handed to the user for
-    real facts) before any fill attempt, instead of reverse-engineering
-    field text from a live page under time pressure each time. Returns
-    {"status", "reason", "questions": [{"question_text", "field_label"}]}.
+    """Ingests a listing's actual custom and demographic questions WITHOUT
+    filling anything and without leaving a browser open - a lightweight
+    preview step so answers can be crafted deliberately (reviewed, or handed
+    to the user for real facts) before any fill attempt, instead of
+    reverse-engineering field text from a live page under time pressure each
+    time. Returns {"status", "reason", "questions": [{"question_text",
+    "field_label", "category"}]} - category is "custom_question" or
+    "demographic_question", useful for telling apart a fresh essay-style
+    question from one that should only ever be answered from a saved,
+    pre-approved fact (see the "demographic_question" handling in
+    open_and_fill).
     """
     discovery = _discover_and_map(url, api_key, deepseek_api_key, session_key=f"scan-{session_key or url}")
 
     questions = []
     if discovery.status == "ok":
         for entry in discovery.mapping:
-            if entry.get("category") != "custom_question":
+            category = entry.get("category")
+            if category not in ("custom_question", "demographic_question"):
                 continue
             index = entry.get("index")
             field_label = next(
                 (f.get("label_text") or f.get("name") or f"field #{index}" for f in discovery.raw_fields if f["index"] == index),
                 f"field #{index}",
             )
-            questions.append({"question_text": entry.get("question_text") or field_label, "field_label": field_label})
+            questions.append({
+                "question_text": entry.get("question_text") or field_label,
+                "field_label": field_label,
+                "category": category,
+            })
 
     # Scanning is preview-only - always close the browser it opened, unlike
     # open_and_fill which deliberately leaves it open for review.
@@ -490,61 +562,94 @@ def open_and_fill(
             f"field #{index}",
         )
 
+        def _record(ok: bool, note: str = "") -> None:
+            if ok:
+                auto_mapped.append(field_label)
+            else:
+                flagged.append(f"{field_label} ({note})" if note else field_label)
+
         try:
             if category == "first_name" and contact_info.get("name"):
                 first, _, _ = contact_info["name"].partition(" ")
-                _fill_field(pw_page, locator, first)
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, first), "no matching option offered")
             elif category == "last_name" and contact_info.get("name"):
                 _, _, rest = contact_info["name"].partition(" ")
                 if rest:
-                    _fill_field(pw_page, locator, rest)
-                    auto_mapped.append(field_label)
+                    _record(_fill_field(pw_page, locator, rest), "no matching option offered")
                 else:
                     flagged.append(field_label)  # single-word name, no real "last name" to give
             elif category == "name" and contact_info.get("name"):
-                _fill_field(pw_page, locator, contact_info["name"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, contact_info["name"]), "no matching option offered")
             elif category == "email" and contact_info.get("email"):
-                _fill_field(pw_page, locator, contact_info["email"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, contact_info["email"]), "no matching option offered")
             elif category == "phone" and contact_info.get("phone"):
-                _fill_field(pw_page, locator, contact_info["phone"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, contact_info["phone"]), "no matching option offered")
             elif category == "country" and contact_info.get("country"):
-                _fill_field(pw_page, locator, contact_info["country"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, contact_info["country"]), "no matching option offered")
             elif category == "city" and contact_info.get("city"):
-                _fill_field(pw_page, locator, contact_info["city"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, contact_info["city"]), "no matching option offered")
             elif category == "linkedin_url" and links.get("linkedin_url"):
-                _fill_field(pw_page, locator, links["linkedin_url"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, links["linkedin_url"]), "no matching option offered")
             elif category == "portfolio_url" and links.get("portfolio_url"):
-                _fill_field(pw_page, locator, links["portfolio_url"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, links["portfolio_url"]), "no matching option offered")
             elif category == "github_url" and links.get("github_url"):
-                _fill_field(pw_page, locator, links["github_url"])
-                auto_mapped.append(field_label)
+                _record(_fill_field(pw_page, locator, links["github_url"]), "no matching option offered")
             elif category == "resume_upload" and resume_pdf_path:
                 locator.set_input_files(resume_pdf_path)
                 auto_mapped.append(field_label)
             elif category == "cover_letter_upload" and cover_letter_pdf_path:
                 locator.set_input_files(cover_letter_pdf_path)
                 auto_mapped.append(field_label)
+            elif category == "demographic_question":
+                # Bank-lookup only - NEVER falls through to a fresh LLM
+                # draft. A resume has no basis to state a person's gender
+                # identity, ethnicity, disability, or veteran status, so
+                # unlike custom_question, an unmatched demographic question
+                # just stays flagged, full stop - guessing here would mean
+                # fabricating someone's identity, not just missing a fact.
+                question_text = entry.get("question_text") or field_label
+                bank_entry = find_answer(question_text)
+                if bank_entry and bank_entry.get("approved"):
+                    # A bank hit on the QUESTION doesn't guarantee the saved
+                    # ANSWER text matches this employer's exact option wording
+                    # (confirmed directly: "Man" vs. this form's real "Male")
+                    # - check _fill_field's result, don't assume success.
+                    _record(
+                        _fill_field(pw_page, locator, bank_entry["answer"]),
+                        f"saved answer {bank_entry['answer']!r} wasn't offered as an option on this form",
+                    )
+                else:
+                    flagged.append(f"{field_label} (no saved answer on file)")
+            elif category == "consent_checkbox":
+                # Confirmed directly on a live Reddit form: not every
+                # "checkbox"-looking consent field is a real HTML checkbox -
+                # one was actually a react-select-style single-option
+                # combobox (its only option, verified directly: "I agree").
+                # Try a real checkbox first, fall back to the same
+                # click-and-select path everything else uses.
+                try:
+                    locator.check()
+                    auto_mapped.append(field_label)
+                except Exception:
+                    _record(_fill_field(pw_page, locator, "I agree"), "no matching consent option offered")
             elif category == "custom_question":
                 question_text = entry.get("question_text") or field_label
                 bank_entry = find_answer(question_text)
                 if bank_entry and bank_entry.get("approved"):
-                    _fill_field(pw_page, locator, bank_entry["answer"])
-                    auto_mapped.append(field_label)
+                    _record(
+                        _fill_field(pw_page, locator, bank_entry["answer"]),
+                        f"saved answer {bank_entry['answer']!r} wasn't offered as an option on this form",
+                    )
                 else:
                     draft = _draft_custom_answer(
                         question_text, resume_text, company, role_title, api_key, deepseek_api_key
                     )
-                    _fill_field(pw_page, locator, draft)
-                    pw_page.evaluate(_FLAG_BANNER_JS, index)
-                    flagged.append(f"{field_label} (unreviewed AI draft)")
+                    filled_ok = _fill_field(pw_page, locator, draft)
+                    if filled_ok:
+                        pw_page.evaluate(_FLAG_BANNER_JS, index)
+                        flagged.append(f"{field_label} (unreviewed AI draft)")
+                    else:
+                        flagged.append(f"{field_label} (drafted answer wasn't a valid option on this form)")
             else:
                 flagged.append(field_label)
         except Exception as e:
