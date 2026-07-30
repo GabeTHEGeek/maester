@@ -9,3 +9,4 @@ PROJECT_SUMMARY.md
 .streamlit/secrets.toml
 venv/
 sample_data/resume.md
+CLAUDE.md
