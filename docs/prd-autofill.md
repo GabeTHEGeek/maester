@@ -305,8 +305,193 @@ filled, waiting for them. They review it and click submit themselves.
     wording, and every employer phrases these differently - this will keep
     happening on new listings and needs the same fix-and-verify treatment
     each time, not a one-time patch.
+13. **Native radio/checkbox groups — resolved: consolidate into one logical
+    field with an options list, fill by checking the matched option.**
+    Tested on a live Ashby listing (Rula), a completely different form
+    architecture from Greenhouse's react-select comboboxes seen elsewhere:
+    Pronouns, gender identity, veteran status, and work-authorization/
+    driver's-license questions are all native `<input type="radio">` /
+    `<input type="checkbox">` groups wrapped in a `<fieldset>`, with the
+    real question text in a `<label>` that's a direct child of the
+    fieldset - not attached to any single option. Treating each option as
+    its own field (the original behavior) hid the actual question from the
+    mapping step entirely and produced dozens of duplicate, unlabeled
+    entries. `_SCAN_FIELDS_JS` now detects fieldset-wrapped radio/checkbox
+    inputs and consolidates them into one `radiogroup`/`checkboxgroup`
+    entry with an `options` list; a new `_check_group_option` finds the
+    one option whose label matches the intended answer (exact match
+    preferred, substring only if unambiguous) and checks it - never
+    guessing among multiple plausible matches, same principle as
+    everywhere else. `demographic_question` and `custom_question` both
+    route through this transparently via a shared `_fill_answer` entry
+    point. Also fixed a related discovery: `_draft_custom_answer` now
+    accepts the field's `options` list and, when present, is told to
+    answer with exactly one option label verbatim rather than a paragraph -
+    the original paragraph-answer approach happened to substring-match
+    correctly in testing (a draft starting with "No,..." matched the "No"
+    option), but that was luck, not a guarantee, so this closes the gap
+    properly instead of relying on it.
+14. **Reveal-button false ambiguity — resolved: prefer a real `<button>`
+    over a wrapping `<a>`/`[role="button"]` with identical inherited
+    text.** Also found on the same Rula listing: the real "Apply for this
+    Job" button was wrapped in a plain container element that also matched
+    the reveal-click selector and inherited the same text, producing a
+    spurious two-way "ambiguous" result (the existing zero-or-multiple-
+    matches safety rule correctly refused to click either, but that left
+    the tool unable to reveal the form at all). Fixed narrowly: when
+    matches share identical normalized text and exactly one of them is a
+    real `<button>` tag, prefer that one - re-verified the full regression
+    suite afterward (genuine single button, submit-only page, two
+    genuinely distinct buttons with different text, and a new case for two
+    genuinely distinct buttons sharing the same text) to confirm this
+    doesn't weaken the ambiguity safety net in the cases where ambiguity is
+    real, only in this specific nested-wrapper false positive.
+15. **Native `<select>` support — added proactively, informed by an external
+    reference (career-ops's `apply.md`), not yet hit on a real listing.**
+    All four real listings tested so far (Cribl, Tekion, Reddit, Rula)
+    happened to use either a text-input-backed combobox or a native radio/
+    checkbox group - never a genuine `<select>`. That reference doc flags
+    huge native selects (country/university dropdowns with 1000+ options)
+    as a common real-world pattern elsewhere, with a specific warning: don't
+    snapshot the full option list into a prompt, and use `select_option()`
+    directly rather than click-and-type. Implemented both: `_SCAN_FIELDS_JS`
+    captures a `<select>`'s options directly; a new `_select_native_option`
+    uses Playwright's `select_option(label=...)`, matched through the same
+    shared `_find_matching_option` exact/substring logic (refactored out of
+    `_check_group_option` so both paths stay in sync) - never guessing among
+    multiple plausible options. Verified synthetically (no real listing has
+    surfaced one yet): a 1500-option select correctly resolves a real match
+    and safely returns `False` (not a guess) on a bogus value.
+16. **Field-mapping prompt bloat — resolved: cap options shown to the LLM,
+    keep the full list for the actual fill.** Testing the native-select
+    fix directly surfaced the exact anti-pattern career-ops's docs warned
+    against: a 1500-option field's ENTIRE option list was being embedded in
+    the field-mapping prompt, for zero benefit - the mapping step only
+    needs enough to recognize "this is a country-type field," not every
+    choice. Fixed by capping any field's `options` list to 15 entries
+    (plus an `options_truncated_count`) in the copy sent to the LLM, while
+    `raw_fields` - the untruncated version the actual fill step reads from
+    - keeps everything. Verified directly: the truncated prompt was ~1.2KB
+    instead of the tens of KB the full list would have cost, and the fill
+    step still correctly matched and selected the right option using the
+    complete untruncated list.
+17. **Character-limit awareness — added alongside the above, informed by
+    the same reference doc's field-contract idea.** `_SCAN_FIELDS_JS` now
+    captures a text field's real `maxlength` when the browser enforces one.
+    `_draft_custom_answer` is told the limit and asked to stay within it,
+    with a hard backstop truncation if it doesn't - preventing a plausible
+    "looks filled, actually cut off mid-sentence" failure (a plain `.fill()`
+    silently truncates to `maxlength`, the same failure shape as several
+    bugs already fixed this session) before it's ever been directly
+    observed on a real listing.
+18. **Fields silently vanishing from every output — resolved: backfill any
+    index the mapping call didn't return.** User-reported symptom:
+    "fields get skipped/flagged that should be fillable." Root cause,
+    confirmed directly: the field-mapping LLM call can omit a field's index
+    from its JSON response entirely (a partial/truncated response, or just
+    an oversight), and nothing downstream ever checked for that - an
+    omitted field wasn't filled, wasn't flagged, didn't appear anywhere,
+    as if it had never existed on the page. `_discover_and_map` now
+    compares every `raw_fields` index against what the mapping call
+    actually returned and backfills a `"skip"` entry for anything missing,
+    so a gap in the LLM's response becomes a visible flagged field instead
+    of a silent disappearance. Verified synthetically: a mapping response
+    that omits two of three indices now correctly ends up covering all
+    three.
+19. **Non-deterministic name-field categorization — resolved: explicit,
+    fixed rules instead of per-field judgment.** Also part of the same
+    user report: identical back-to-back runs against the same Rula listing
+    categorized its "First and Last Name (Legal Name)" field differently
+    each time - sometimes `name` (correctly auto-filled), sometimes
+    `custom_question` (triggering a nonsensical AI-drafted "answer" to what
+    is just a name field). The prompt now states this as a fixed rule, not
+    a per-field judgment call: every field asking for a combined first+last
+    name is always `name`, however many such fields a form has (Preferred
+    Name and Legal Name both count); anything name-adjacent but not a real
+    name field (Middle Name, Nickname) is always `skip`, never drafted.
+    Re-ran the same listing twice after the fix: both runs now correctly
+    and identically auto-map both name fields and flag Middle Name.
+20. **Post-fill verification pass — added per explicit user request, closing
+    the loop on every "reported filled, actually wasn't" bug this session.**
+    User's framing: after filling the form, take a snapshot, compare
+    against what was reported, fix anything wrong, and repeat until
+    correct. Important scope boundary, stated explicitly rather than left
+    implicit: this verifies that fields the tool *attempted* to fill
+    actually took - it does not force answers into fields correctly left
+    blank (an unmatched demographic question, reCAPTCHA, an unapproved
+    consent checkbox). "Every field filled" would mean guessing at things
+    this tool has refused to guess at all session; that boundary doesn't
+    move. Implemented as `_verify_and_retry`: every successful fill is now
+    recorded with the exact value and mechanism used (not just its label),
+    then re-checked against the field's real DOM state (input value,
+    checked state, or selected option, matching how each widget type
+    actually confirms a real commit) up to `_MAX_FILL_RETRIES = 2` times,
+    retrying with the same inputs on a mismatch. Anything still unverified
+    after that is demoted out of the auto-filled list entirely into
+    flagged, rather than staying reported as a success that isn't real.
+    Verified two ways: a field started genuinely empty (the real bug
+    pattern from earlier this session) is caught and actually fixed by the
+    retry, confirmed by reading its real value afterward; a genuinely
+    unfillable field (no matching option exists at all) is correctly
+    demoted to flagged after exactly 3 bounded attempts, not stuck
+    retrying indefinitely.
+21. **A third distinct widget pattern on the same Ashby form: a custom
+    Yes/No button-toggle — resolved with its own tag and fill/verify
+    logic.** Discovered while wiring in real user-supplied answers for
+    Rula's work-authorization and experience-screening questions: neither
+    react-select nor native radio/checkbox, but two real `<button>`
+    elements ("Yes"/"No") alongside a `tabindex="-1"` checkbox that only
+    stores boolean state and isn't itself a meaningful interactive target.
+    Added a `yesnogroup` tag - detected via the checkbox-with-sibling-
+    buttons shape, not any hashed class name - with its own fill path
+    (click the matched button, reusing `_check_group_option`'s exact/
+    substring matching) and its own verification signal. That verification
+    needed a real fix mid-testing: the shared boolean checkbox looked like
+    the obvious signal, but clicking "No" can leave it at `checked=False`,
+    which is indistinguishable from "never answered" - confirmed directly
+    as a live false-negative ("fill did not verify after 3 attempts" on a
+    field that actually had been filled correctly). Fixed by checking the
+    clicked button's own CSS state instead (Ashby marks the selected option
+    with a class containing "active" - the hash suffix varies per build,
+    but that substring is stable). Re-verified directly for both Yes and
+    No afterward.
+22. **Label discovery for two more field shapes on the same form —
+    resolved: a broader, still-targeted ancestor search.** The same
+    real-answer wiring surfaced two more previously-unlabeled field types:
+    the Yes/No toggle's real question text lives in a
+    `.ashby-application-form-question-title` element scoped to an ancestor
+    that varies by field type (a `.ashby-application-form-field-entry` div
+    for some fields, a bare `[data-field-entry-id]` div or a `<fieldset>`
+    for others - confirmed by inspecting several fields directly rather
+    than assuming one wrapper class covers all of them). `_SCAN_FIELDS_JS`
+    now searches `.closest('.ashby-application-form-field-entry,
+    [data-field-entry-id], fieldset')` as a single broadened fallback,
+    fixing "Current State of Residency" and "Race identity" (previously
+    invisible to the mapping step entirely) alongside the Yes/No toggles.
+23. **"Pronouns" mis-categorized as `skip` — resolved with an explicit
+    prompt example.** A real saved answer ("He/him/his") for Rula's
+    Pronouns field didn't get applied - not a matching bug, a
+    categorization bug: the field-mapping call put it in `skip`, never
+    reaching the bank-lookup step at all. The `demographic_question`
+    category description named gender identity, veteran status, etc. by
+    example but not pronouns specifically; added it explicitly. Re-verified:
+    Pronouns now correctly auto-fills from the saved answer.
+24. **Two of seven user-supplied answers didn't match this listing's actual
+    current question text at all — surfaced, not silently forced.** Before
+    wiring anything in, a check against the live page's real wording found
+    one answer aimed at a stricter threshold than given ("4+ years" vs. the
+    real "at least 5 years" of PM experience) and one aimed at a question
+    that doesn't exist on this form at all (A/B testing vs. the real
+    question, about complex workflow redesign). Asked the user directly
+    for each rather than assuming equivalence or forcing the given answer
+    onto a different question; got an explicit "yes, I have 5+ years" for
+    the first, and "draft an honest answer from the resume, still flagged"
+    for the second. Final result after all fixes in this batch: 14 of 22
+    fields auto-filled and verified (up from 7 at the start of this round),
+    8 correctly flagged (2 real Rula-specific questions correctly drafted
+    from the resume, not from a mismatched answer).
 
 ## Open questions
 
-None remaining as of this draft. All twelve forks raised across drafting and
-real-world testing are resolved above.
+None remaining as of this draft. All twenty-four forks raised across
+drafting and real-world testing are resolved above.

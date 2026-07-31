@@ -141,7 +141,17 @@ def _find_apply_reveal_button(page):
     the allowlist exactly, isn't a type="submit" element, doesn't also hit
     the submit denylist, and isn't nested inside a known unrelated widget
     (see _looks_like_non_application_widget). Ambiguity (zero or multiple
-    matches) means staying safe and doing nothing, not guessing."""
+    distinct matches) means staying safe and doing nothing, not guessing.
+
+    Confirmed directly on a live Ashby listing (Rula): a wrapping element
+    (a plain container div with no button semantics of its own) around the
+    real <button> both matched the selector and both had the same inherited
+    inner text, producing a spurious two-way "ambiguous" result for what is
+    really one logical clickable target, not two competing ones. When that
+    exact pattern shows up - matches with identical normalized text where
+    tag counts are otherwise ambiguous - prefer an actual <button> element
+    over a wrapping <a>/[role="button"] with the same text, since a real
+    button is the more specific, more likely genuine interactive control."""
     candidates = page.locator('button, a, [role="button"]').all()
     matches = []
     for el in candidates:
@@ -158,6 +168,13 @@ def _find_apply_reveal_button(page):
             matches.append(el)
         except Exception:
             continue
+
+    if len(matches) > 1:
+        same_text = {_normalize_button_text(el.inner_text()) for el in matches}
+        buttons_only = [el for el in matches if el.evaluate("e => e.tagName") == "BUTTON"]
+        if len(same_text) == 1 and len(buttons_only) == 1:
+            matches = buttons_only
+
     if len(matches) == 1:
         return matches[0]
     return None
@@ -166,6 +183,7 @@ _SCAN_FIELDS_JS = """
 (skipped) => {
   const fields = [];
   const els = document.querySelectorAll('input, textarea, select');
+  const seenGroupFieldsets = new Set();
   let i = 0;
   els.forEach(el => {
     const type = (el.getAttribute('type') || el.tagName).toLowerCase();
@@ -178,17 +196,124 @@ _SCAN_FIELDS_JS = """
     // tabindex="-1" aria-hidden input sat right next to the real "Country"
     // combobox with no label of its own.
     if (el.getAttribute('aria-hidden') === 'true') return;
+
+    // Ashby's own custom "Yes/No" button-toggle widget (confirmed directly
+    // on a live Rula listing): a tabindex="-1" checkbox that only stores
+    // boolean state, sitting alongside two real <button> elements (text
+    // "Yes"/"No") that are what a real user actually clicks. Neither a
+    // react-select combobox nor a native radio/checkbox group - a third,
+    // distinct pattern. The checkbox itself can't be meaningfully checked
+    // (tabindex=-1, not a real interactive target); the two buttons are
+    // what needs a data-maester-index each, with the fill step clicking
+    // whichever one matches the intended answer.
+    if (type === 'checkbox' && el.getAttribute('tabindex') === '-1' && !el.closest('fieldset')) {
+      const container = el.parentElement;
+      const toggleButtons = container ? Array.from(container.querySelectorAll(':scope > button')) : [];
+      if (toggleButtons.length >= 2) {
+        const entry = el.closest('.ashby-application-form-field-entry, [data-field-entry-id], fieldset');
+        const titleEl = entry ? entry.querySelector('.ashby-application-form-question-title') : null;
+        const groupLabel = titleEl ? titleEl.innerText.trim() : '';
+
+        const options = [];
+        toggleButtons.forEach(btn => {
+          btn.setAttribute('data-maester-index', String(i));
+          options.push({index: i, label: btn.innerText.trim()});
+          i += 1;
+        });
+
+        fields.push({
+          index: options[0].index,
+          tag: 'yesnogroup',
+          type: 'button',
+          name: el.getAttribute('name') || '',
+          id: '',
+          placeholder: '',
+          aria_label: '',
+          label_text: groupLabel,
+          options: options,
+        });
+        return;
+      }
+    }
+
+    // Native radio/checkbox GROUPS (confirmed directly on a live Ashby
+    // form: Pronouns as a checkbox group, work authorization/gender
+    // identity/veteran status as radio groups) are a completely different
+    // pattern from the react-select comboboxes seen elsewhere - each
+    // option is its own <input>, with the group's real question text in a
+    // <label> that's a direct child of the wrapping <fieldset>, not
+    // attached to any single option. Treating each option as its own
+    // unlabeled field would hide the actual question from the mapping
+    // step entirely. Consolidate into ONE entry per group instead, with
+    // an "options" list the fill step picks a specific option from.
+    if (type === 'radio' || type === 'checkbox') {
+      const fieldset = el.closest('fieldset');
+      if (fieldset) {
+        if (seenGroupFieldsets.has(fieldset)) return;
+        seenGroupFieldsets.add(fieldset);
+
+        let groupLabel = '';
+        const directLabel = fieldset.querySelector(':scope > label');
+        if (directLabel) groupLabel = directLabel.innerText.trim();
+        if (!groupLabel) {
+          const titleEl = fieldset.querySelector('.ashby-application-form-question-title');
+          if (titleEl) groupLabel = titleEl.innerText.trim();
+        }
+
+        const optionInputs = fieldset.querySelectorAll(`input[type="${type}"]`);
+        const options = [];
+        optionInputs.forEach(optEl => {
+          optEl.setAttribute('data-maester-index', String(i));
+          let optLabel = '';
+          if (optEl.id) {
+            const lbl = document.querySelector(`label[for="${optEl.id}"]`);
+            if (lbl) optLabel = lbl.innerText.trim();
+          }
+          options.push({index: i, label: optLabel});
+          i += 1;
+        });
+
+        if (options.length > 0) {
+          fields.push({
+            index: options[0].index,
+            tag: type === 'radio' ? 'radiogroup' : 'checkboxgroup',
+            type: type,
+            name: el.getAttribute('name') || '',
+            id: '',
+            placeholder: '',
+            aria_label: '',
+            label_text: groupLabel,
+            options: options,
+          });
+        }
+        return;
+      }
+      // radio/checkbox with no wrapping fieldset - fall through below,
+      // treated as an ordinary standalone field (e.g. a lone consent box).
+    }
+
     el.setAttribute('data-maester-index', String(i));
     let labelText = '';
     if (el.id) {
       const lbl = document.querySelector(`label[for="${el.id}"]`);
       if (lbl) labelText = lbl.innerText.trim();
     }
+    // Fallback for forms where the label's `for` doesn't resolve to this
+    // element's own id (confirmed directly on Ashby: a type-ahead combobox
+    // input with no id at all, inside a <fieldset> whose <label for="...">
+    // points at a different, unrendered id) - the stable, non-hashed Ashby
+    // class names (unlike their per-build CSS-module hashes) reliably tie
+    // a field to its real question text regardless of id mismatches.
+    if (!labelText) {
+      const entry = el.closest('.ashby-application-form-field-entry, [data-field-entry-id], fieldset');
+      const titleEl = entry ? entry.querySelector('.ashby-application-form-question-title') : null;
+      if (titleEl) labelText = titleEl.innerText.trim();
+    }
     if (!labelText) {
       const parentLabel = el.closest('label');
       if (parentLabel) labelText = parentLabel.innerText.trim();
     }
-    fields.push({
+    const field = {
       index: i,
       tag: el.tagName.toLowerCase(),
       type: type,
@@ -197,7 +322,25 @@ _SCAN_FIELDS_JS = """
       placeholder: el.getAttribute('placeholder') || '',
       aria_label: el.getAttribute('aria-label') || '',
       label_text: labelText,
-    });
+    };
+    // Native <select> (confirmed as a real, untested-until-now gap - every
+    // form seen so far used a text-input-backed combobox or a native radio/
+    // checkbox group instead, but country/university-style selects with
+    // hundreds of real <option> elements are common enough elsewhere that
+    // this needs its own path, using select_option() rather than the
+    // click-and-type approach the other widgets need).
+    if (el.tagName.toLowerCase() === 'select') {
+      field.options = Array.from(el.options).map(o => ({value: o.value, label: o.text.trim()}));
+    }
+    // Character limit, when the browser will actually enforce one - lets
+    // the drafting step stay inside it instead of producing text a plain
+    // .fill() would silently truncate (same "looks filled, isn't really"
+    // failure shape as everything else fixed this session).
+    const maxlength = el.getAttribute('maxlength');
+    if (maxlength && parseInt(maxlength, 10) > 0) {
+      field.limit = parseInt(maxlength, 10);
+    }
+    fields.push(field);
     i += 1;
   });
   return fields;
@@ -222,6 +365,14 @@ known set of categories, using each field's tag, type, name, placeholder, and
 label text. Respond ONLY with valid JSON, no markdown fences, no prose:
 {"fields": [{"index": <int>, "category": "<category>", "question_text": "<only for custom_question and demographic_question, the actual question being asked, verbatim from the label>"}]}
 
+Some fields represent a whole group of radio buttons, checkboxes, or a
+custom Yes/No button-toggle widget (tag "radiogroup"/"checkboxgroup"/
+"yesnogroup") rather than a single input - you'll see an "options" list of
+the actual choices (e.g. "Yes"/"No", or a list of gender identities).
+Categorize the GROUP as a whole using its own label_text, the same as any
+other field - you never need to pick which specific option to
+select, that's handled separately using whatever answer is decided on.
+
 Valid categories:
 - "first_name", "last_name" - use these, NOT "name", whenever first and last
   name have SEPARATE fields (the overwhelmingly common case: distinct
@@ -229,20 +380,35 @@ Valid categories:
   name gets typed into both boxes, which is wrong data, not just imprecise -
   treat first/last name detection carefully, never default to "name" when
   two separate name fields are present.
-- "name" - ONLY for a single field meant to hold the candidate's whole name
-  at once (rare - most forms split first/last).
+- "name" - for a field meant to hold the candidate's whole name at once
+  (e.g. a single "First and Last Name" box). A form can have MORE THAN ONE
+  such field (e.g. separate "Preferred Name" and "Legal Name" boxes asking
+  for the full name each time) - map EVERY one of them to "name", always,
+  never "custom_question". A name field is never a free-text question that
+  needs drafting, regardless of how many of them a form has or what
+  they're labeled - treat this as a fixed rule, not a judgment call per
+  field, since the same form has been observed categorizing this
+  inconsistently between otherwise-identical runs.
+- "skip" (not "custom_question") for any OTHER name-adjacent field that
+  isn't first/last/whole name - "Middle Name," "Nickname," "Preferred
+  Pronunciation," and similar - since there's no real answer to draft for
+  these and guessing would mean inventing a fact, not answering a question.
 - "email", "phone", "country", "city" - standard contact fields ("country"
   and "city" mean location of residence, e.g. an address section - not a
   work-authorization or visa question, those are "custom_question")
 - "linkedin_url", "portfolio_url", "github_url" - profile link fields
 - "resume_upload" - a file input for a resume/CV
 - "cover_letter_upload" - a file input for a cover letter
-- "demographic_question" - voluntary EEO/self-identification questions
-  (gender identity, transgender experience, sexual orientation, disability
-  status, veteran status, race/ethnicity). Distinct from "custom_question"
-  on purpose: these are only ever filled from a pre-approved saved answer,
-  NEVER freshly drafted, since a resume has no basis to state a person's
-  identity and guessing would mean fabricating it.
+- "demographic_question" - voluntary EEO/self-identification questions:
+  gender identity, transgender experience, sexual orientation, disability
+  status, veteran status, race/ethnicity, AND pronouns (confirmed directly:
+  a bare "Pronouns" field with checkbox options like "She/her/hers,"
+  "He/him/his," "They/them/theirs" was being mis-categorized as "skip"
+  before this was spelled out explicitly - it belongs here, not "skip" or
+  "custom_question"). Distinct from "custom_question" on purpose: these are
+  only ever filled from a pre-approved saved answer, NEVER freshly drafted,
+  since a resume has no basis to state a person's identity and guessing
+  would mean fabricating it.
 - "consent_checkbox" - a checkbox agreeing to the employer's privacy policy
   or to processing of the candidate's own application/survey data as part
   of applying. NOT a marketing-email opt-in or anything unrelated to the
@@ -282,29 +448,67 @@ def _extract_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key):
+def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key, options=None, limit=None):
     """Same no-invention rule as engines/tailor.py: draws only on what's
     actually in the resume, never fabricates an experience or credential to
-    answer a question the resume doesn't actually support."""
-    prompt = (
-        f"Answer this job application question, grounded ONLY in the resume "
-        f"below - never invent experience, employers, or metrics not already "
-        f"present in it. If the resume doesn't truly support a strong answer, "
-        f"write an honest, concise one anyway rather than fabricating specifics.\n\n"
-        f"COMPANY: {company}\nROLE: {role_title}\nQUESTION: {question_text}\n\n"
-        f"RESUME:\n{resume_text}\n\n"
-        f"Respond with ONLY the answer text, 2-4 sentences, no preamble, no "
-        f"JSON, no markdown fences."
-    )
+    answer a question the resume doesn't actually support.
+
+    `options` is passed for radiogroup/checkboxgroup questions (see
+    _SCAN_FIELDS_JS) - when present, the draft is constrained to exactly one
+    of those option labels rather than a free paragraph. This matters
+    because _check_group_option matches the draft against the option list
+    by substring: a paragraph answer happens to work when it starts with an
+    unambiguous word like "No," but that's luck, not a guarantee - asking
+    for the exact option label directly removes the guesswork entirely.
+
+    `limit` is the field's real character maxlength, when the browser has
+    one (see _SCAN_FIELDS_JS). A draft longer than this would get silently
+    truncated by .fill() - the same "looks filled, isn't really" failure
+    shape as everything else fixed this session - so it's both asked for in
+    the prompt AND enforced as a hard backstop below, consistent with this
+    project's standing rule that a prompt instruction is a request, not a
+    guarantee (see CLAUDE.md)."""
+    if options:
+        option_labels = [o["label"] for o in options]
+        prompt = (
+            f"Answer this job application question, grounded ONLY in the resume "
+            f"below - never invent experience, employers, or metrics not already "
+            f"present in it.\n\n"
+            f"COMPANY: {company}\nROLE: {role_title}\nQUESTION: {question_text}\n\n"
+            f"RESUME:\n{resume_text}\n\n"
+            f"This question must be answered with EXACTLY one of these options, "
+            f"verbatim, nothing else added: {option_labels}\n"
+            f"Respond with ONLY that exact option text, no preamble, no punctuation "
+            f"added, no explanation."
+        )
+        max_tokens = 60
+    else:
+        limit_instruction = f" HARD LIMIT: {limit} characters maximum, no exceptions." if limit else ""
+        prompt = (
+            f"Answer this job application question, grounded ONLY in the resume "
+            f"below - never invent experience, employers, or metrics not already "
+            f"present in it. If the resume doesn't truly support a strong answer, "
+            f"write an honest, concise one anyway rather than fabricating specifics."
+            f"{limit_instruction}\n\n"
+            f"COMPANY: {company}\nROLE: {role_title}\nQUESTION: {question_text}\n\n"
+            f"RESUME:\n{resume_text}\n\n"
+            f"Respond with ONLY the answer text, 2-4 sentences, no preamble, no "
+            f"JSON, no markdown fences."
+        )
+        max_tokens = 400
+
     text, _provider = call_with_fallback(
         system_prompt="",
         user_prompt=prompt,
         anthropic_api_key=api_key,
         anthropic_model=FIELD_MAPPING_MODEL,
-        max_tokens=400,
+        max_tokens=max_tokens,
         deepseek_api_key=deepseek_api_key,
     )
-    return text.strip()
+    text = text.strip()
+    if limit and len(text) > limit:
+        text = text[:limit].rstrip()
+    return text
 
 
 def _fill_field(page, locator, value: str) -> bool:
@@ -370,6 +574,83 @@ def _fill_field(page, locator, value: str) -> bool:
         return False  # a menu opened, but nothing in it matched - don't trust the raw typed text
 
 
+def _find_matching_option(options: list, value: str):
+    """Shared matcher for both native <select> options and radio/checkbox
+    group options: prefers an exact (case-insensitive) match; falls back to
+    a substring match only if that yields exactly one candidate. Returns
+    None - never guesses - if nothing matches or more than one option
+    plausibly does, same principle as everywhere else in this module: an
+    uncertain match is worse than an honest flag."""
+    normalized_value = value.strip().lower()
+
+    exact = [o for o in options if o["label"].strip().lower() == normalized_value]
+    candidates = exact or [
+        o for o in options
+        if normalized_value in o["label"].strip().lower() or o["label"].strip().lower() in normalized_value
+    ]
+
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _check_group_option(page, raw_field_entry: dict, value: str) -> bool:
+    """For a radiogroup/checkboxgroup entry from _SCAN_FIELDS_JS (native
+    radio/checkbox inputs, confirmed directly on a live Ashby form - a
+    completely different pattern from the react-select comboboxes seen
+    elsewhere), finds the specific option whose label matches `value` and
+    checks it. For a "yesnogroup" (Ashby's own custom Yes/No button-toggle
+    widget, a third distinct pattern found on the same form - two real
+    <button> elements alongside a tabindex="-1" checkbox that can't be
+    meaningfully checked directly), clicks the matched button instead -
+    the correct interaction for what a real user would actually click, not
+    a state to set programmatically. Either way, the same guarantee holds:
+    never guesses among ambiguous or absent matches."""
+    option = _find_matching_option(raw_field_entry.get("options", []), value)
+    if option is None:
+        return False
+    try:
+        target = page.locator(f'[data-maester-index="{option["index"]}"]')
+        if raw_field_entry.get("tag") == "yesnogroup":
+            target.click()
+        else:
+            target.check()
+        return True
+    except Exception:
+        return False
+
+
+def _select_native_option(locator, raw_field_entry: dict, value: str) -> bool:
+    """For a genuine native <select> element (confirmed as a real gap: every
+    form tested so far used a text-input-backed combobox or a radio/
+    checkbox group instead - but country/university-style selects with
+    hundreds of real <option> elements are common enough elsewhere to need
+    their own path). Uses Playwright's select_option() directly by label -
+    the correct, native API for this element, unlike the click-and-type
+    approach the other widgets need. Matches the same way as a group:
+    exact label match preferred, substring only if unambiguous; never
+    guesses among multiple plausible options."""
+    option = _find_matching_option(raw_field_entry.get("options", []), value)
+    if option is None:
+        return False
+    try:
+        locator.select_option(label=option["label"])
+        return True
+    except Exception:
+        return False
+
+
+def _fill_answer(page, raw_field_entry: dict, locator, value: str) -> bool:
+    """Single entry point the fill loop uses for any text-like answer,
+    whether the underlying field turns out to be an ordinary input, a
+    react-select combobox, a native <select>, or a native radio/checkbox
+    group - callers don't need to know which, since _SCAN_FIELDS_JS already
+    tells us via tag/options."""
+    if raw_field_entry.get("tag") == "select":
+        return _select_native_option(locator, raw_field_entry, value)
+    if raw_field_entry.get("options"):
+        return _check_group_option(page, raw_field_entry, value)
+    return _fill_field(page, locator, value)
+
+
 class _DiscoveryResult:
     def __init__(self, status, reason="", reveal_clicked=False, playwright=None, browser=None, page=None, raw_fields=None, mapping=None):
         self.status = status  # "ok" | "dead" | "error" | "no_fields" | "mapping_failed"
@@ -401,7 +682,7 @@ def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
 
     playwright = sync_playwright().start()
     browser = playwright.chromium.launch(headless=False)
-    context = browser.new_context()
+    context = browser.new_context(viewport={"width": 1600, "height": 1000})
     pw_page = context.new_page()
     pw_page.goto(url, wait_until="domcontentloaded")
     # Many career pages (Cribl's included) client-render their real content,
@@ -443,7 +724,21 @@ def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
             playwright=playwright, browser=browser, page=pw_page,
         )
 
-    mapping_prompt = "FORM FIELDS (JSON):\n" + json.dumps(raw_fields, indent=2)
+    # A field's full options list can be huge (a real country/university
+    # <select> can carry 1000+ entries) and the mapping step only needs
+    # enough of it to recognize the field's TYPE, not every choice - sending
+    # the whole thing would flood the prompt for zero benefit. The complete
+    # list stays in raw_fields for the actual fill step, which needs it.
+    _MAX_OPTIONS_IN_PROMPT = 15
+    prompt_fields = []
+    for f in raw_fields:
+        options = f.get("options", [])
+        if len(options) > _MAX_OPTIONS_IN_PROMPT:
+            f = dict(f)
+            f["options"] = options[:_MAX_OPTIONS_IN_PROMPT]
+            f["options_truncated_count"] = len(options) - _MAX_OPTIONS_IN_PROMPT
+        prompt_fields.append(f)
+    mapping_prompt = "FORM FIELDS (JSON):\n" + json.dumps(prompt_fields, indent=2)
     try:
         mapping_text, _provider = call_with_fallback(
             system_prompt=FIELD_MAPPING_SYSTEM_PROMPT,
@@ -459,6 +754,17 @@ def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
             status="mapping_failed", reason=f"Field mapping failed ({e}).", reveal_clicked=reveal_clicked,
             playwright=playwright, browser=browser, page=pw_page, raw_fields=raw_fields,
         )
+
+    # The mapping call can omit a field entirely (a truncated or incomplete
+    # JSON response) - without this check, that field just vanishes from
+    # every downstream list: not filled, not flagged, no record it was ever
+    # on the page at all. Every raw_fields index gets an explicit "skip"
+    # entry here if the LLM didn't return one, so it always shows up in the
+    # fill loop's flagged output instead of silently disappearing.
+    mapped_indices = {entry.get("index") for entry in mapping}
+    for f in raw_fields:
+        if f["index"] not in mapped_indices:
+            mapping.append({"index": f["index"], "category": "skip"})
 
     return _DiscoveryResult(
         status="ok", reveal_clicked=reveal_clicked,
@@ -512,6 +818,111 @@ def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
     return {"status": discovery.status, "reason": discovery.reason, "questions": questions}
 
 
+_MAX_FILL_RETRIES = 2  # bounded: a field that's genuinely unfillable (option
+# removed, page changed) must not spin forever - after this many retries it
+# gets demoted to flagged instead of trusted.
+
+
+def _verify_filled(page, attempt: dict) -> bool:
+    """Re-reads the field's actual current DOM state and confirms it really
+    matches what this module believes it filled - never trust a prior
+    success report without checking, the same lesson repeated more than
+    once this session (a field reported as filled turned out, on direct
+    inspection, to still show its empty placeholder)."""
+    index = attempt["index"]
+    value = attempt["value"]
+    raw_entry = attempt["raw_entry"]
+    locator = page.locator(f'[data-maester-index="{index}"]')
+
+    try:
+        if attempt.get("file"):
+            return locator.evaluate("e => e.files.length > 0")
+        if attempt.get("checkbox"):
+            return locator.is_checked()
+        if raw_entry.get("tag") == "select":
+            option = _find_matching_option(raw_entry.get("options", []), value)
+            if option is None:
+                return False
+            selected = locator.evaluate("e => e.options[e.selectedIndex] ? e.options[e.selectedIndex].text : ''")
+            return selected.strip().lower() == option["label"].strip().lower()
+        if raw_entry.get("tag") == "yesnogroup":
+            option = _find_matching_option(raw_entry.get("options", []), value)
+            if option is None:
+                return False
+            # The matched option is a <button>, not a real checkbox - it has
+            # no is_checked() of its own. The sibling hidden checkbox looked
+            # like the right signal at first, but it's a SINGLE shared
+            # boolean for the whole Yes/No pair - clicking "No" can leave it
+            # at checked=False, which is indistinguishable from "never
+            # answered" (confirmed directly: this false-negative happened on
+            # a real listing). The button's own CSS state after being
+            # clicked is reliable instead - Ashby marks the selected option
+            # with a class containing "active" (hash suffix varies per
+            # build, but that substring is stable).
+            option_locator = page.locator(f'[data-maester-index="{option["index"]}"]')
+            class_name = option_locator.get_attribute("class") or ""
+            return "active" in class_name.lower()
+        if raw_entry.get("options"):
+            option = _find_matching_option(raw_entry.get("options", []), value)
+            if option is None:
+                return False
+            return page.locator(f'[data-maester-index="{option["index"]}"]').is_checked()
+        # Ordinary text field or react-select combobox: either the value is
+        # genuinely sitting in the box (plain input), or the box cleared
+        # because a real option got clicked (react-select's actual
+        # "committed" signal, confirmed directly earlier this session) -
+        # an empty box with the menu still open or never opened is neither.
+        current = locator.input_value()
+        if current.strip():
+            return value.strip().lower() in current.strip().lower() or current.strip().lower() in value.strip().lower()
+        return locator.get_attribute("aria-expanded") == "false"
+    except Exception:
+        return False
+
+
+def _retry_fill(page, attempt: dict) -> None:
+    """Re-attempts a fill that failed verification, using the exact same
+    inputs recorded the first time - a fresh locator lookup in case
+    anything in the DOM shifted, not a cached reference."""
+    index = attempt["index"]
+    value = attempt["value"]
+    raw_entry = attempt["raw_entry"]
+    locator = page.locator(f'[data-maester-index="{index}"]')
+    try:
+        if attempt.get("file"):
+            locator.set_input_files(value)
+        elif attempt.get("checkbox"):
+            locator.check()
+        else:
+            _fill_answer(page, raw_entry, locator, value)
+    except Exception:
+        pass  # verification on the next round will catch and report this
+
+
+def _verify_and_retry(page, attempted: list) -> tuple:
+    """Takes a snapshot of every field this run believes it filled, checks
+    each one's real state, and retries any mismatch up to _MAX_FILL_RETRIES
+    times before giving up on it. Returns (verified_labels, flagged_notes) -
+    anything that never verifies gets demoted out of the "filled" list
+    entirely rather than staying reported as a success that isn't real."""
+    pending = list(attempted)
+    for _ in range(_MAX_FILL_RETRIES + 1):
+        failing = [a for a in pending if not _verify_filled(page, a)]
+        if not failing:
+            break
+        for a in failing:
+            _retry_fill(page, a)
+
+    verified_labels = []
+    flagged_notes = []
+    for a in attempted:
+        if _verify_filled(page, a):
+            verified_labels.append(a["label"])
+        else:
+            flagged_notes.append(f"{a['label']} (fill did not verify after {_MAX_FILL_RETRIES + 1} attempts)")
+    return verified_labels, flagged_notes
+
+
 def open_and_fill(
     url,
     resume_text,
@@ -552,54 +963,63 @@ def open_and_fill(
 
     auto_mapped = []
     flagged = []
+    # Every field this loop believes it successfully filled, kept alongside
+    # exactly what was used to fill it - not just the label - so the
+    # verify-and-retry pass below can re-check the real DOM state and, if
+    # it doesn't match, redo the fill with the same inputs rather than just
+    # trusting the report. This is the direct fix for a repeated failure
+    # mode this session: a field marked as successfully filled that turned
+    # out, on inspection, to still be genuinely blank.
+    attempted = []
 
     for entry in mapping:
         index = entry.get("index")
         category = entry.get("category", "skip")
         locator = pw_page.locator(f'[data-maester-index="{index}"]')
-        field_label = next(
-            (f.get("label_text") or f.get("name") or f"field #{index}" for f in raw_fields if f["index"] == index),
-            f"field #{index}",
-        )
+        raw_entry = next((f for f in raw_fields if f["index"] == index), {})
+        field_label = raw_entry.get("label_text") or raw_entry.get("name") or f"field #{index}"
 
-        def _record(ok: bool, note: str = "") -> None:
+        def _record(ok: bool, value=None, note: str = "") -> None:
             if ok:
                 auto_mapped.append(field_label)
+                attempted.append({"label": field_label, "index": index, "raw_entry": raw_entry, "value": value})
             else:
                 flagged.append(f"{field_label} ({note})" if note else field_label)
 
         try:
             if category == "first_name" and contact_info.get("name"):
                 first, _, _ = contact_info["name"].partition(" ")
-                _record(_fill_field(pw_page, locator, first), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, first), first, "no matching option offered")
             elif category == "last_name" and contact_info.get("name"):
                 _, _, rest = contact_info["name"].partition(" ")
                 if rest:
-                    _record(_fill_field(pw_page, locator, rest), "no matching option offered")
+                    _record(_fill_answer(pw_page, raw_entry, locator, rest), rest, "no matching option offered")
                 else:
                     flagged.append(field_label)  # single-word name, no real "last name" to give
             elif category == "name" and contact_info.get("name"):
-                _record(_fill_field(pw_page, locator, contact_info["name"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, contact_info["name"]), contact_info["name"], "no matching option offered")
             elif category == "email" and contact_info.get("email"):
-                _record(_fill_field(pw_page, locator, contact_info["email"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, contact_info["email"]), contact_info["email"], "no matching option offered")
             elif category == "phone" and contact_info.get("phone"):
-                _record(_fill_field(pw_page, locator, contact_info["phone"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, contact_info["phone"]), contact_info["phone"], "no matching option offered")
             elif category == "country" and contact_info.get("country"):
-                _record(_fill_field(pw_page, locator, contact_info["country"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, contact_info["country"]), contact_info["country"], "no matching option offered")
             elif category == "city" and contact_info.get("city"):
-                _record(_fill_field(pw_page, locator, contact_info["city"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, contact_info["city"]), contact_info["city"], "no matching option offered")
             elif category == "linkedin_url" and links.get("linkedin_url"):
-                _record(_fill_field(pw_page, locator, links["linkedin_url"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, links["linkedin_url"]), links["linkedin_url"], "no matching option offered")
             elif category == "portfolio_url" and links.get("portfolio_url"):
-                _record(_fill_field(pw_page, locator, links["portfolio_url"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, links["portfolio_url"]), links["portfolio_url"], "no matching option offered")
             elif category == "github_url" and links.get("github_url"):
-                _record(_fill_field(pw_page, locator, links["github_url"]), "no matching option offered")
+                _record(_fill_answer(pw_page, raw_entry, locator, links["github_url"]), links["github_url"], "no matching option offered")
             elif category == "resume_upload" and resume_pdf_path:
                 locator.set_input_files(resume_pdf_path)
                 auto_mapped.append(field_label)
+                attempted.append({"label": field_label, "index": index, "raw_entry": raw_entry, "value": resume_pdf_path, "file": True})
             elif category == "cover_letter_upload" and cover_letter_pdf_path:
                 locator.set_input_files(cover_letter_pdf_path)
                 auto_mapped.append(field_label)
+                attempted.append({"label": field_label, "index": index, "raw_entry": raw_entry, "value": cover_letter_pdf_path, "file": True})
             elif category == "demographic_question":
                 # Bank-lookup only - NEVER falls through to a fresh LLM
                 # draft. A resume has no basis to state a person's gender
@@ -613,9 +1033,10 @@ def open_and_fill(
                     # A bank hit on the QUESTION doesn't guarantee the saved
                     # ANSWER text matches this employer's exact option wording
                     # (confirmed directly: "Man" vs. this form's real "Male")
-                    # - check _fill_field's result, don't assume success.
+                    # - check the result, don't assume success.
                     _record(
-                        _fill_field(pw_page, locator, bank_entry["answer"]),
+                        _fill_answer(pw_page, raw_entry, locator, bank_entry["answer"]),
+                        bank_entry["answer"],
                         f"saved answer {bank_entry['answer']!r} wasn't offered as an option on this form",
                     )
                 else:
@@ -630,23 +1051,27 @@ def open_and_fill(
                 try:
                     locator.check()
                     auto_mapped.append(field_label)
+                    attempted.append({"label": field_label, "index": index, "raw_entry": raw_entry, "value": None, "checkbox": True})
                 except Exception:
-                    _record(_fill_field(pw_page, locator, "I agree"), "no matching consent option offered")
+                    _record(_fill_answer(pw_page, raw_entry, locator, "I agree"), "I agree", "no matching consent option offered")
             elif category == "custom_question":
                 question_text = entry.get("question_text") or field_label
                 bank_entry = find_answer(question_text)
                 if bank_entry and bank_entry.get("approved"):
                     _record(
-                        _fill_field(pw_page, locator, bank_entry["answer"]),
+                        _fill_answer(pw_page, raw_entry, locator, bank_entry["answer"]),
+                        bank_entry["answer"],
                         f"saved answer {bank_entry['answer']!r} wasn't offered as an option on this form",
                     )
                 else:
                     draft = _draft_custom_answer(
-                        question_text, resume_text, company, role_title, api_key, deepseek_api_key
+                        question_text, resume_text, company, role_title, api_key, deepseek_api_key,
+                        options=raw_entry.get("options"), limit=raw_entry.get("limit"),
                     )
-                    filled_ok = _fill_field(pw_page, locator, draft)
+                    filled_ok = _fill_answer(pw_page, raw_entry, locator, draft)
                     if filled_ok:
-                        pw_page.evaluate(_FLAG_BANNER_JS, index)
+                        if not raw_entry.get("options"):
+                            pw_page.evaluate(_FLAG_BANNER_JS, index)
                         flagged.append(f"{field_label} (unreviewed AI draft)")
                     else:
                         flagged.append(f"{field_label} (drafted answer wasn't a valid option on this form)")
@@ -654,6 +1079,9 @@ def open_and_fill(
                 flagged.append(field_label)
         except Exception as e:
             flagged.append(f"{field_label} (fill failed: {e})")
+
+    auto_mapped, extra_flagged = _verify_and_retry(pw_page, attempted)
+    flagged.extend(extra_flagged)
 
     reason = "Clicked 'Apply' to reveal the application form before filling it in." if reveal_clicked else ""
     return FillResult(
