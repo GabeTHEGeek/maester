@@ -1,0 +1,11 @@
+{
+  "_comment": "Fictional placeholder shipped with the repo. Replace sample_data/profile.json (gitignored) with your own real facts — see sample_data/resume.example.md for the same pattern applied to the resume file.",
+  "work_authorization_us": ["Yes"],
+  "visa_sponsorship_needed": ["No"],
+  "gender_identity": ["Prefer not to disclose"],
+  "current_company": ["Example Corp"],
+  "how_did_you_hear": ["LinkedIn"],
+  "city": ["Austin"],
+  "state": ["Texas"],
+  "country": ["United States"]
+}

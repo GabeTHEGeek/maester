@@ -12,4 +12,5 @@ PROJECT_SUMMARY.md
 venv/
 sample_data/resume.md
 sample_data/answer_bank.json
+sample_data/profile.json
 CLAUDE.md

@@ -490,8 +490,133 @@ filled, waiting for them. They review it and click submit themselves.
     fields auto-filled and verified (up from 7 at the start of this round),
     8 correctly flagged (2 real Rula-specific questions correctly drafted
     from the resume, not from a mismatched answer).
+25. **"Current State of Residency" mis-categorized as `city` — resolved
+    with a dedicated `state` category.** Adding a real, verified answer
+    ("Maryland") for this field didn't work: it stayed flagged instead of
+    auto-filling. Root cause, confirmed directly: the field-mapping prompt
+    only had "country" and "city" as location categories, so the model
+    put a state-of-residency field under "city" - the fill loop then tried
+    to fill the candidate's actual city ("Baltimore") into a field
+    expecting a US state name, which correctly failed verification (no
+    state option matches a city name) and got flagged, but never even
+    reached the answer bank in the first place, since "city" routes
+    through `contact_info` directly, not `find_answer`. Added "state" as
+    its own category and its own `contact_info["state"]` handling,
+    parallel to the existing country/city ones - more generalizable than a
+    one-off per-question answer-bank entry, since any employer's own
+    "state of residence" field can now use it. Re-verified independently
+    after the fix: the field now shows a real committed selection (the
+    input directly contains "Maryland," a valid alternate confirmation
+    signal alongside the aria-expanded-false / cleared-input pattern seen
+    on other comboboxes). Final count after this fix: 15 of 22 fields
+    auto-filled and verified.
+26. **A mid-session tooling incident, worth recording plainly: repeated
+    test runs left stale Chromium processes that caused a later run to
+    hang.** User-reported: "it froze." Diagnosis confirmed two things
+    directly rather than guessing: an earlier run's browser had errored
+    out mid-fill ("Target page, context or browser has been closed") and
+    left its Chromium process running; a subsequent retry then hung
+    waiting on a resource the stale process still held, with no live
+    Python interpreter process behind the stuck shell. Resolved by killing
+    all `chrome-mac-arm64/Google Chrome for Testing` processes for a clean
+    slate, then re-running successfully. Not a bug in `browser/autofill.py`
+    itself, but a real operational gap worth naming: this module has no
+    cleanup path for a browser that errors out mid-run (by design, the
+    happy path deliberately leaves the browser open for review - but nothing
+    currently closes one that failed instead of finishing). A future
+    improvement, not implemented here: detect a mid-run Playwright
+    connection error specifically and close that browser's own resources
+    before returning an error result, rather than leaving it to accumulate.
+
+27. **Architecture change, user-directed: split scanning by job board, and
+    replace exact-text answer matching with a structured profile + semantic
+    topic matching.** Prompted directly by two observations: the exact-text
+    answer bank meant the same real question, worded differently across
+    employers ("Are you currently authorized to work in the U.S.?" vs. "Are
+    you currently eligible to work in the United States of America?"),
+    needed a separate saved entry each time instead of recognizing they're
+    the same question; and the vendor-specific scanning logic (Ashby's
+    class names, its Yes/No widget) was mixed into the same file as the
+    generic, vendor-agnostic fill/verify engine, which would only get
+    messier as more platforms' quirks accumulated.
+
+    Three changes, built together:
+    - **File split**: `browser/vendors/` now owns per-platform SCANNING
+      (finding and labeling fields on that vendor's specific markup) -
+      `vendors/base.py` holds the generic, already-tested behavior every
+      vendor starts from (used directly by Greenhouse, Lever, Gem, and any
+      unrecognized custom careers page); `vendors/ashby.py` layers Ashby's
+      specific detection (the Yes/No button-toggle, its stable class-name
+      label fallback) on top. Vendor detection reuses
+      `utils.extract.parse_company_and_source_from_url` rather than
+      re-deriving URL patterns, so the two stay in sync. `browser/fields.py`
+      now holds the generic FILL/VERIFY engine (react-select handling,
+      native `<select>`, group matching, the whole verify-and-retry system)
+      - this part doesn't need to know which vendor produced a field's tag,
+      only what the tag means, so it stays vendor-agnostic. `autofill.py`
+      is now orchestration only. Re-verified after the split: identical
+      15/22 result on Rula, confirming the refactor changed nothing
+      behaviorally.
+    - **`data/profile.py` + `sample_data/profile.json`** (gitignored, real
+      personal facts - same protection as the resume): a flat table of
+      STATIC facts (work authorization, demographics, logistics) keyed by a
+      stable topic string, replacing the old per-question exact-text bank
+      entries for anything that's really just a fact about the candidate,
+      not a company-specific narrative. Each topic's value is a LIST of
+      acceptable phrasings, not a single string - confirmed directly this
+      matters: "Man" and "Male" mean the same fact but don't substring-match
+      each other, and different employers' dropdowns use one or the other.
+      Deliberately NOT migrated: questions whose real answer depends on the
+      specific wording, not a static fact (e.g. "do you have at least 5
+      years of X experience" - the threshold in the question matters, not
+      just a stored yes/no) - those stay on the existing resume-grounded
+      drafting path, which already reasons about them correctly.
+    - **Semantic topic matching**: the field-mapping prompt now receives the
+      list of topics the profile already has answers for, and is asked to
+      recognize when a `demographic_question`/`custom_question` field is
+      REALLY asking about one of them, however differently worded, tagging
+      it with that exact topic string (or omitting it entirely if unsure -
+      never inventing a new topic, never guessing). `_try_topic_answer`
+      tries every saved phrasing for a matched topic against the specific
+      form before falling back to the old exact-text bank, then to fresh
+      drafting.
+
+    Verified conclusively, not just assumed: ran the full Rula fill with
+    `sample_data/answer_bank.json` emptied to `[]` entirely. Every fact-based
+    field (pronouns, gender identity, race identity, veteran status, work
+    authorization, visa sponsorship) still auto-filled and verified
+    correctly - proof the profile/topic system, not the old bank, is doing
+    the work now. The one field that changed behavior did so correctly and
+    as designed: the "5 years experience" question (never migrated to the
+    profile, since it's a threshold judgment, not a fact) now falls through
+    to fresh resume-grounded drafting instead of a stale bank entry, and
+    still produces the right answer.
+28. **Wiring the Ashby resume-autofill upload — attempted, then reverted
+    after a real regression, not a hypothetical one.** After confirming
+    field #0 was Ashby's own "upload your resume to prefill this form"
+    convenience input (identified via its stable
+    `ashby-application-form-autofill-input-root` container class), the user
+    approved reusing the same resume PDF for it. Wiring it in immediately
+    broke the run: two consecutive attempts both ended in the browser
+    context terminating mid-fill ("Target page, context or browser has been
+    closed"), the same failure shape as the tooling incident in #26 - but
+    this time the user directly diagnosed the actual cause by watching it
+    happen live: uploading to that field triggers Ashby's own asynchronous
+    resume-parsing, which then tries to auto-populate name/email/phone/etc.
+    *at the same time* this module's own fill loop is independently trying
+    to fill those same fields through its own, already-verified process - a
+    genuine race condition between two systems writing to the same DOM
+    concurrently, not random flakiness or a leftover process. Reverted the
+    label wiring entirely; the field goes back to being flagged and
+    untouched, exactly as before. Re-verified: the same test that crashed
+    twice with the field wired in ran clean immediately after reverting -
+    same stable 14/22 result, no errors. The real, required "Resume" field
+    elsewhere on the form already fills correctly without this risk, so
+    nothing was actually lost by not automating this one.
 
 ## Open questions
 
-None remaining as of this draft. All twenty-four forks raised across
-drafting and real-world testing are resolved above.
+None remaining as of this draft. All twenty-eight forks raised across
+drafting and real-world testing are resolved above. Item #26 names one
+real, deliberately-deferred follow-up (stale-browser cleanup on a mid-run
+error) rather than a fork that's actually closed.
