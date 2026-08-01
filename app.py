@@ -21,7 +21,7 @@ import sources.gem as job_source_gem
 import sources.greenhouse as job_source_greenhouse
 import sources.lever as job_source_lever
 import sources.remotive as job_source
-from data.company_registry import add_company, load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
+from data.company_registry import load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
 from utils.resolve import resolve_cross_platform
 from data.dedup import load_seen_urls, record_scans
 from utils.email_notify import build_deep_dive_summary, send_summary_email
@@ -233,7 +233,7 @@ with tab_search:
             edited_rows = st.data_editor(
                 registry_rows,
                 num_rows="dynamic",
-                use_container_width=True,
+                width='stretch',
                 column_config={
                     "platform": st.column_config.SelectboxColumn(
                         options=["greenhouse", "ashby", "gem", "lever", "bamboohr", "unknown"]
@@ -586,9 +586,9 @@ with tab_search:
                 with c2:
                     st.markdown(f":{grade_color}[**{r.grade}**]  {r.score:.1f}/5.0")
                 with c3:
-                    st.link_button("Open ↗", r.url, use_container_width=True)
+                    st.link_button("Open ↗", r.url, width='stretch')
                 with c4:
-                    if st.button("Deep dive", key=f"dive_{r.job_id}", use_container_width=True):
+                    if st.button("Deep dive", key=f"dive_{r.job_id}", width='stretch'):
                         st.session_state.deep_dive_job = st.session_state.jobs_by_id.get(r.job_id)
                         st.rerun()
 
@@ -619,7 +619,7 @@ with tab_deep_dive:
         with col_open:
             st.link_button("Open listing ↗", job["url"])
         with col_clear:
-            if st.button("✕ Clear selection", use_container_width=True):
+            if st.button("✕ Clear selection", width='stretch'):
                 st.session_state.deep_dive_job = None
                 st.rerun()
         target_job = job
@@ -974,7 +974,7 @@ with tab_dashboard:
         rows_sorted = sorted(rows, key=lambda r: r.get("timestamp") or "", reverse=True)
         st.dataframe(
             rows_sorted,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "url": st.column_config.LinkColumn("Listing", display_text="Open ↗")
             },

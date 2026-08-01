@@ -1,7 +1,7 @@
 """
-job_source_lever.py
+lever.py
 Pulls live job listings directly from individual companies' Lever job boards,
-the same per-company pattern as job_source_greenhouse.py and job_source_ashby.py.
+the same per-company pattern as greenhouse.py and ashby.py.
 Lever's public API is one call per company, no auth required:
 
     GET https://api.lever.co/v0/postings/{company}?mode=json
@@ -9,11 +9,11 @@ Lever's public API is one call per company, no auth required:
 Docs: https://github.com/lever/postings-api
 """
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 LEVER_URL = "https://api.lever.co/v0/postings/{company}"
@@ -51,28 +51,18 @@ def _fetch_board(board_token: str, timeout: int = 15) -> list:
         return []
 
 
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
-
-
 def _full_description(job: dict) -> str:
     """Lever splits content across description + descriptionPlain + a 'lists'
     array of extra sections (Responsibilities, Requirements, etc.) — join
     all of it so extraction (salary, panel context) sees the complete JD,
     not just the intro paragraph."""
-    parts = [job.get("descriptionPlain") or _strip_html(job.get("description", ""))]
+    parts = [job.get("descriptionPlain") or strip_html(job.get("description", ""))]
     for section in job.get("lists") or []:
         section_title = section.get("text", "")
-        section_content = _strip_html(section.get("content", ""))
+        section_content = strip_html(section.get("content", ""))
         if section_content:
             parts.append(f"{section_title}: {section_content}" if section_title else section_content)
-    additional = job.get("additionalPlain") or _strip_html(job.get("additional", ""))
+    additional = job.get("additionalPlain") or strip_html(job.get("additional", ""))
     if additional:
         parts.append(additional)
     return "\n\n".join(p for p in parts if p)
@@ -107,8 +97,8 @@ def search_lever(
         boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
-    exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in (exclude_titles or [])]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     jobs = []
     boards_checked = []
@@ -136,7 +126,7 @@ def search_lever(
             if query_words and not any(w in title_lower for w in query_words):
                 continue
 
-            title_normalized = _normalize(title)
+            title_normalized = normalize_title(title)
             if include_normalized is not None and not any(
                 ok in title_normalized for ok in include_normalized
             ):

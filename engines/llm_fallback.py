@@ -27,6 +27,7 @@ still runs exactly as it did before — this only adds a new path, it doesn't
 change the old ones.
 """
 
+import json
 import re
 import time
 
@@ -66,6 +67,24 @@ def _extract_retry_delay(exc: Exception) -> float:
     if match:
         return float(match.group(1)) + 1.0  # small buffer past what it asked for
     return _DEFAULT_RETRY_DELAY_SECONDS
+
+
+def extract_json(text: str) -> dict:
+    """Pull a JSON object out of a model response, tolerant of stray text/
+    fences. Shared by rubric.py, panel.py, and tailor.py — each one's own
+    prompt asks for JSON-only, but a prompt instruction is a request, not a
+    guarantee (see CLAUDE.md), so all three parse defensively the same way
+    rather than trusting the model's output format blindly."""
+    text = text.strip()
+    # Strip markdown code fences wherever they appear, not just at the very
+    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
+    # before a fenced block, which a start-anchored check alone would miss.
+    text = re.sub(r"```(json)?", "", text).strip()
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        snippet = text[:300] if text else "(empty response)"
+        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
+    return json.loads(match.group(0))
 
 
 def _extract_text(response) -> str:

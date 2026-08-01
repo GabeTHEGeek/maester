@@ -1,5 +1,5 @@
 """
-job_source_gem.py
+gem.py
 Pulls live job listings from individual companies' Gem-hosted job boards
 (jobs.gem.com/{board}). Gem exposes a public GraphQL batch endpoint for the
 job listing (title, location, department) but full descriptions require a
@@ -24,11 +24,11 @@ instead (jobs.gem.com/{company}, the same page a candidate would browse to)
 needs no credentials at all, because it isn't the private API.
 """
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from sources._common import normalize_title
 from utils.extract import extract_salary
 from utils.fetch_job import fetch_job_text
 
@@ -77,10 +77,6 @@ def _fetch_board(board_token: str, timeout: int = 15) -> list:
         return []
 
 
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
-
-
 def _location_string(locations: list) -> str:
     if not locations:
         return ""
@@ -111,8 +107,8 @@ def search_gem(
         boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
-    exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in (exclude_titles or [])]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     jobs = []
     boards_checked = []
@@ -140,7 +136,7 @@ def search_gem(
             if query_words and not any(w in title_lower for w in query_words):
                 continue
 
-            title_normalized = _normalize(title)
+            title_normalized = normalize_title(title)
             if include_normalized is not None and not any(
                 ok in title_normalized for ok in include_normalized
             ):

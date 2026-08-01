@@ -1,5 +1,5 @@
 """
-job_source_greenhouse.py
+greenhouse.py
 Pulls live job listings directly from individual companies' Greenhouse job boards.
 
 Unlike Remotive, Greenhouse has no aggregate search endpoint — each company has
@@ -11,11 +11,11 @@ of real postings per company; there's no "search" to fool).
 Docs: https://developers.greenhouse.io/job-board.html
 """
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs"
@@ -54,14 +54,6 @@ def _fetch_board(board_token: str, timeout: int = 15) -> list[dict]:
         return []
 
 
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
 
 
 def search_greenhouse(
@@ -83,8 +75,8 @@ def search_greenhouse(
         boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
-    exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in (exclude_titles or [])]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     jobs = []
     boards_checked = []
@@ -119,7 +111,7 @@ def search_greenhouse(
             if query_words and not any(w in title_lower for w in query_words):
                 continue
 
-            title_normalized = _normalize(title)
+            title_normalized = normalize_title(title)
             if include_normalized is not None and not any(
                 ok in title_normalized for ok in include_normalized
             ):
@@ -131,7 +123,7 @@ def search_greenhouse(
             if job.get("location") and job["location"].get("name"):
                 location = job["location"]["name"]
 
-            full_description = _strip_html(job.get("content", ""))
+            full_description = strip_html(job.get("content", ""))
 
             # Some Greenhouse boards expose a structured pay range (pay-transparency
             # compliance); most don't. Fall back to scanning the FULL description

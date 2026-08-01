@@ -1,5 +1,5 @@
 """
-job_source_bamboohr.py
+bamboohr.py
 Pulls live job listings directly from individual companies' BambooHR
 careers pages, the same per-company pattern as greenhouse.py/ashby.py.
 BambooHR's public, unauthenticated careers API is two calls per company:
@@ -23,11 +23,11 @@ matches the query, so total request count stays proportional to actual
 matches, not to a board's total posting count.
 """
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 BAMBOOHR_LIST_URL = "https://{board}.bamboohr.com/careers/list"
@@ -68,16 +68,6 @@ def _fetch_detail(board_token: str, job_id, timeout: int = 15) -> dict:
         return {}
 
 
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
-
-
 def search_bamboohr(
     query: str,
     boards: list = None,
@@ -98,8 +88,8 @@ def search_bamboohr(
         boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
-    exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in (exclude_titles or [])]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     boards_checked = []
     boards_failed = []
@@ -128,7 +118,7 @@ def search_bamboohr(
             title_lower = title.lower()
             if query_words and not any(w in title_lower for w in query_words):
                 continue
-            title_normalized = _normalize(title)
+            title_normalized = normalize_title(title)
             if include_normalized is not None and not any(
                 ok in title_normalized for ok in include_normalized
             ):
@@ -173,7 +163,7 @@ def search_bamboohr(
                 location_bits.append(loc["state"])
             location = ", ".join(location_bits)
 
-            full_description = _strip_html(detail.get("description", ""))
+            full_description = strip_html(detail.get("description", ""))
             # BambooHR's own "compensation" field is often just the literal
             # string "Negotiated" rather than a real figure - fall back to
             # regex extraction on the description in that case, same as

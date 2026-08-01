@@ -1,20 +1,19 @@
 """
-rubric_engine.py
+rubric.py
 Fast, cheap multi-dimension rubric scoring for batches of jobs. This is the
 first pass over search results: score everything, rank it, then only run the
-expensive 5-panelist deep-dive (panel_engine.run_panel) on whatever the user
+expensive 5-panelist deep-dive (panel.run_panel) on whatever the user
 clicks into.
 
 Uses Haiku for speed/cost since this runs once per job in a batch.
 """
 
 import json
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from utils.extract import compute_current_role_tenure
-from engines.llm_fallback import call_with_fallback
+from engines.llm_fallback import call_with_fallback, extract_json
 
 QUICK_MODEL = "claude-haiku-4-5-20251001"
 
@@ -121,21 +120,6 @@ def _score_to_grade(score: float) -> str:
     if score >= 1.5:
         return "D"
     return "F"
-    comp_reliability: str = ""
-    published: str = ""
-
-
-def _extract_json(text: str) -> dict:
-    text = text.strip()
-    # Strip markdown code fences wherever they appear, not just at the very
-    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
-    # before a fenced block, which a start-anchored check alone would miss.
-    text = re.sub(r"```(json)?", "", text).strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        snippet = text[:300] if text else "(empty response)"
-        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
-    return json.loads(match.group(0))
 
 
 def _score_one(resume_text: str, job: dict, api_key: str, deepseek_api_key: str = "") -> QuickScore:
@@ -160,7 +144,7 @@ Description: {job['description']}
         deepseek_api_key=deepseek_api_key,
     )
     try:
-        data = _extract_json(text)
+        data = extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Same truncation safety net as the deep-dive panel and tailoring —
         # quick-scan was missing this entirely, so any truncated response
@@ -174,7 +158,7 @@ Description: {job['description']}
             max_tokens=1200,
             deepseek_api_key=deepseek_api_key,
         )
-        data = _extract_json(text)
+        data = extract_json(text)
     return QuickScore(
         job_id=str(job.get("id", job["url"])),
         title=job["title"],

@@ -71,9 +71,3 @@ def log_fill_attempt(
                 "status": status,
             }
         )
-
-
-def load_all() -> list:
-    ensure_fill_log()
-    with open(FILL_LOG_PATH, newline="") as f:
-        return list(csv.DictReader(f))

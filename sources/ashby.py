@@ -1,17 +1,17 @@
 """
-job_source_ashby.py
+ashby.py
 Pulls live job listings directly from individual companies' Ashby job boards,
-the same per-company pattern as job_source_greenhouse.py. Ashby's public API
+the same per-company pattern as greenhouse.py. Ashby's public API
 is one call per company: api.ashbyhq.com/posting-api/job-board/{board_name}.
 
 Docs: https://developers.ashbyhq.com/reference/jobboardapi-jobboard-info
 """
 
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
+from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 ASHBY_URL = "https://api.ashbyhq.com/posting-api/job-board/{board}"
@@ -47,16 +47,6 @@ def _fetch_board(board_token: str, timeout: int = 15) -> list[dict]:
         return []
 
 
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
-
-
 def _compensation_to_salary(job: dict) -> str:
     """Ashby sometimes returns a structured compensation summary when
     includeCompensation=true is passed. Fall back to '' if absent — the
@@ -86,8 +76,8 @@ def search_ashby(
         boards = DEFAULT_BOARDS
     query_words = [w.lower() for w in query.split() if w]
 
-    exclude_normalized = [_normalize(t) for t in (exclude_titles or [])]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in (exclude_titles or [])]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     jobs = []
     boards_checked = []
@@ -115,7 +105,7 @@ def search_ashby(
             if query_words and not any(w in title_lower for w in query_words):
                 continue
 
-            title_normalized = _normalize(title)
+            title_normalized = normalize_title(title)
             if include_normalized is not None and not any(
                 ok in title_normalized for ok in include_normalized
             ):
@@ -123,7 +113,7 @@ def search_ashby(
             if any(bad in title_normalized for bad in exclude_normalized):
                 continue
 
-            full_description = _strip_html(job.get("descriptionHtml", ""))
+            full_description = strip_html(job.get("descriptionHtml", ""))
             salary = _compensation_to_salary(job) or extract_salary(full_description)
             description = full_description[:4000]
 

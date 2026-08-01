@@ -1,5 +1,5 @@
 """
-tailor_engine.py
+tailor.py
 Generates a tailored resume (reordered/reworded existing bullets, JD keywords
 woven in naturally) and a cover letter for a specific listing, grounded in the
 deep-dive panel's own findings (gaps, resume fixes).
@@ -14,7 +14,7 @@ import json
 import re
 
 from utils.extract import compute_current_role_tenure
-from engines.llm_fallback import call_with_fallback
+from engines.llm_fallback import call_with_fallback, extract_json
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
 
@@ -303,19 +303,6 @@ Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 """
 
 
-def _extract_json(text: str) -> dict:
-    text = text.strip()
-    # Strip markdown code fences wherever they appear, not just at the very
-    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
-    # before a fenced block, which a start-anchored check alone would miss.
-    text = re.sub(r"```(json)?", "", text).strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        snippet = text[:300] if text else "(empty response)"
-        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
-    return json.loads(match.group(0))
-
-
 def generate_tailored_materials(
     resume_text: str,
     job_text: str,
@@ -360,7 +347,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
     )
 
     try:
-        data = _extract_json(text)
+        data = extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Same truncation safety net as the deep-dive panel.
         text, _provider = call_with_fallback(
@@ -371,7 +358,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
             max_tokens=10000,
             deepseek_api_key=deepseek_api_key,
         )
-        data = _extract_json(text)
+        data = extract_json(text)
 
     if "tailored_resume_markdown" in data:
         data["tailored_resume_markdown"] = _strip_duplicate_competencies_section(

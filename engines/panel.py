@@ -1,17 +1,14 @@
 """
-panel_engine.py
+panel.py
 Core logic for Maester: runs a job listing + resume through a simulated
 5-perspective hiring panel and returns a structured evaluation.
 """
 
 import json
-import os
-import re
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 from utils.extract import compute_current_role_tenure
-from engines.llm_fallback import call_with_fallback
+from engines.llm_fallback import call_with_fallback, extract_json
 
 
 SYSTEM_PROMPT = """You are a simulated hiring panel evaluating a candidate against a job listing.
@@ -182,20 +179,6 @@ def _sort_panelists(panelists: list) -> list:
     return sorted(panelists, key=sort_key)
 
 
-def _extract_json(text: str) -> dict:
-    """Pull a JSON object out of a model response, tolerant of stray text/fences."""
-    text = text.strip()
-    # Strip markdown code fences wherever they appear, not just at the very
-    # start — Gemini (used as a fallback) sometimes adds a preamble sentence
-    # before a fenced block, which a start-anchored check alone would miss.
-    text = re.sub(r"```(json)?", "", text).strip()
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        snippet = text[:300] if text else "(empty response)"
-        raise ValueError(f"No JSON object found in model response. Raw response started with: {snippet!r}")
-    return json.loads(match.group(0))
-
-
 def run_panel(
     resume_text: str,
     job_text: str,
@@ -234,7 +217,7 @@ Role: {role_title}
     )
 
     try:
-        data = _extract_json(text)
+        data = extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Likely truncated mid-JSON. Retry once with a larger budget before giving up —
         # cheaper than failing the whole evaluation on an occasional long response.
@@ -246,7 +229,7 @@ Role: {role_title}
             max_tokens=8000,
             deepseek_api_key=deepseek_api_key,
         )
-        data = _extract_json(text)
+        data = extract_json(text)
 
     return PanelResult(
         company=company,

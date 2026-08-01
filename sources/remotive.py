@@ -1,5 +1,5 @@
 """
-job_source.py
+remotive.py
 Pulls live job listings from Remotive's free public API (no key required).
 This is the "search" half of the agent loop: given a query, fetch real,
 current listings rather than requiring the user to paste one in.
@@ -11,6 +11,7 @@ import re
 
 import requests
 
+from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 REMOTIVE_URL = "https://remotive.com/api/remote-jobs"
@@ -44,12 +45,6 @@ def _strip_level_words(query: str) -> str:
     for word in LEVEL_WORDS:
         q = re.sub(rf"\b{re.escape(word)}\b", "", q, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", q).strip()
-
-
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
 
 
 # A listing's title must contain at least one of these to be considered a PM
@@ -100,12 +95,6 @@ DEFAULT_TITLE_EXCLUDE = [
 ]
 
 
-def _normalize(text: str) -> str:
-    """Lowercase and strip spaces/hyphens so 'Full-Stack', 'fullstack', and
-    'full stack' all compare equal."""
-    return re.sub(r"[\s\-]+", "", text.lower()).strip()
-
-
 def _fetch_raw(query: str, category: str | None) -> list[dict]:
     params = {"search": query}
     if category:
@@ -124,7 +113,7 @@ def _filter_and_shape(
     jobs = []
     for job in raw_jobs:
         title = job.get("title", "")
-        title_normalized = _normalize(title)
+        title_normalized = normalize_title(title)
 
         if include_normalized is not None and not any(
             ok in title_normalized for ok in include_normalized
@@ -133,7 +122,7 @@ def _filter_and_shape(
         if any(bad in title_normalized for bad in exclude_normalized):
             continue
 
-        full_description = _strip_html(job.get("description", ""))
+        full_description = strip_html(job.get("description", ""))
         salary = job.get("salary", "") or extract_salary(full_description)
         description = full_description[:4000]
 
@@ -188,8 +177,8 @@ def search_jobs(
       {"broadened": bool, "used_query": str, "used_category": str|None, "original_query": str}
     """
     exclude_titles = exclude_titles or []
-    exclude_normalized = [_normalize(t) for t in exclude_titles]
-    include_normalized = [_normalize(t) for t in require_title_keywords] if require_title_keywords else None
+    exclude_normalized = [normalize_title(t) for t in exclude_titles]
+    include_normalized = [normalize_title(t) for t in require_title_keywords] if require_title_keywords else None
 
     broader_query = _strip_level_words(query)
     has_broader = bool(broader_query) and broader_query.lower() != query.lower()

@@ -146,18 +146,3 @@ def mark_failed_all(rows: list, token: str, platforms_tried: list) -> list:
             r["notes"] = f"Not found on any of: {', '.join(sorted(platforms_tried))}"
             r["last_checked"] = now
     return rows
-
-
-def add_company(rows: list, company: str, token: str = "", platform: str = "unknown") -> list:
-    token = (token or "").strip().lower() or company.strip().lower().replace(" ", "")
-    if any(r.get("token") == token for r in rows):
-        return rows
-    rows.append({
-        "company": company,
-        "token": token,
-        "platform": platform,
-        "status": "unverified",
-        "last_checked": "",
-        "notes": "Added manually",
-    })
-    return rows
