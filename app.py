@@ -16,6 +16,7 @@ import streamlit as st
 load_dotenv()
 
 import sources.ashby as job_source_ashby
+import sources.bamboohr as job_source_bamboohr
 import sources.gem as job_source_gem
 import sources.greenhouse as job_source_greenhouse
 import sources.lever as job_source_lever
@@ -149,9 +150,9 @@ with tab_search:
     with st.expander("Search filters"):
         sources = st.multiselect(
             "Search sources",
-            options=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
-            default=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever"],
-            help="Remotive is a broad job board (full-text matched). Greenhouse, Ashby, Gem, and Lever pull directly from specific companies' own job boards (title-matched, no full-text noise).",
+            options=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever", "BambooHR"],
+            default=["Remotive", "Greenhouse", "Ashby", "Gem", "Lever", "BambooHR"],
+            help="Remotive is a broad job board (full-text matched). Greenhouse, Ashby, Gem, Lever, and BambooHR pull directly from specific companies' own job boards (title-matched, no full-text noise).",
             key="search_sources",
         )
         if "company_registry" not in st.session_state:
@@ -164,6 +165,7 @@ with tab_search:
         ab_registry_tokens = tokens_for_platform(registry_rows, "ashby")
         gem_registry_tokens = tokens_for_platform(registry_rows, "gem")
         lever_registry_tokens = tokens_for_platform(registry_rows, "lever")
+        bamboohr_registry_tokens = tokens_for_platform(registry_rows, "bamboohr")
 
         # Bulk-imported companies (there can be thousands) are available as
         # options but never pre-selected by default — only the small, originally
@@ -179,6 +181,7 @@ with tab_search:
         ab_default = _default_for(ab_registry_tokens)
         gem_default = _default_for(gem_registry_tokens)
         lever_default = _default_for(lever_registry_tokens)
+        bamboohr_default = _default_for(bamboohr_registry_tokens)
 
         greenhouse_boards = st.multiselect(
             f"Greenhouse companies to check ({len(gh_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(gh_registry_tokens)} available)",
@@ -212,6 +215,14 @@ with tab_search:
             help="Lever doesn't publish a customer list, so these tokens are only as good as whoever last verified them — wrong or stale tokens will just show up as a failed board below.",
             key="lever_boards_select",
         )
+        bamboohr_boards = st.multiselect(
+            f"BambooHR companies to check ({len(bamboohr_default)}/{MAX_COMPANIES_PER_PLATFORM} selected by default — {len(bamboohr_registry_tokens)} available)",
+            options=bamboohr_registry_tokens,
+            default=bamboohr_default,
+            max_selections=MAX_COMPANIES_PER_PLATFORM,
+            help="BambooHR customers span every industry, not just tech — expect a wider mix of role types than the other sources.",
+            key="bamboohr_boards_select",
+        )
 
         with st.expander("Manage companies (add, edit, verify)"):
             st.caption(
@@ -225,7 +236,7 @@ with tab_search:
                 use_container_width=True,
                 column_config={
                     "platform": st.column_config.SelectboxColumn(
-                        options=["greenhouse", "ashby", "gem", "lever", "unknown"]
+                        options=["greenhouse", "ashby", "gem", "lever", "bamboohr", "unknown"]
                     ),
                     "status": st.column_config.SelectboxColumn(
                         options=["verified", "unverified", "failed"]
@@ -292,6 +303,7 @@ with tab_search:
             ab_meta = {}
             gem_meta = {}
             lever_meta = {}
+            bamboohr_meta = {}
 
             if "Remotive" in sources:
                 with st.spinner(f"Searching Remotive for '{query}'..."):
@@ -383,11 +395,30 @@ with tab_search:
                     except Exception as e:
                         st.error(f"Lever search failed: {e}")
 
+            if "BambooHR" in sources:
+                with st.spinner(f"Checking {len(bamboohr_boards)} BambooHR boards for '{query}'..."):
+                    try:
+                        bamboohr_jobs, bamboohr_meta = job_source_bamboohr.search_bamboohr(
+                            query,
+                            boards=bamboohr_boards,
+                            limit=int(limit),
+                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
+                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                        )
+                        jobs.extend(bamboohr_jobs)
+                        if bamboohr_meta.get("boards_failed"):
+                            st.caption(
+                                f"BambooHR boards that returned nothing (dead subdomain or no matches): "
+                                f"{', '.join(bamboohr_meta['boards_failed'])}"
+                            )
+                    except Exception as e:
+                        st.error(f"BambooHR search failed: {e}")
+
             # Self-correcting registry: whatever actually worked (or didn't)
             # on this search gets recorded, so unverified guesses turn into
             # verified facts, or wrong guesses get flagged, without you
             # having to manually check.
-            if gh_meta or ab_meta or gem_meta or lever_meta:
+            if gh_meta or ab_meta or gem_meta or lever_meta or bamboohr_meta:
                 for token in gh_meta.get("boards_checked", []):
                     registry_rows = record_discovery(registry_rows, token, "greenhouse", found=True)
                 for token in gh_meta.get("boards_failed", []):
@@ -404,6 +435,10 @@ with tab_search:
                     registry_rows = record_discovery(registry_rows, token, "lever", found=True)
                 for token in lever_meta.get("boards_failed", []):
                     registry_rows = record_discovery(registry_rows, token, "lever", found=False)
+                for token in bamboohr_meta.get("boards_checked", []):
+                    registry_rows = record_discovery(registry_rows, token, "bamboohr", found=True)
+                for token in bamboohr_meta.get("boards_failed", []):
+                    registry_rows = record_discovery(registry_rows, token, "bamboohr", found=False)
 
                 # Cross-platform fallback: a company that failed on the platform
                 # it was searched under gets tried on the other supported
@@ -418,6 +453,7 @@ with tab_search:
                     "ashby": ab_meta.get("boards_failed", []),
                     "gem": gem_meta.get("boards_failed", []),
                     "lever": lever_meta.get("boards_failed", []),
+                    "bamboohr": bamboohr_meta.get("boards_failed", []),
                 }
                 failed_by_platform = {p: t for p, t in failed_by_platform.items() if t}
 
@@ -524,6 +560,8 @@ with tab_search:
                         source_label = f"Gem · {r.board}"
                     elif r.source == "lever":
                         source_label = f"Lever · {r.board}"
+                    elif r.source == "bamboohr":
+                        source_label = f"BambooHR · {r.board}"
                     else:
                         source_label = "Remotive"
                     meta_bits = [source_label]

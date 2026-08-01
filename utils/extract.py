@@ -108,6 +108,9 @@ _ATS_URL_PATTERNS = [
     (re.compile(r"jobs\.ashbyhq\.com/([^/]+)/"), "ashby"),
     (re.compile(r"jobs\.lever\.co/([^/]+)/"), "lever"),
     (re.compile(r"jobs\.gem\.com/([^/]+)/"), "gem"),
+    # BambooHR's slug is the SUBDOMAIN, not a path segment after the domain
+    # like the other three - e.g. https://blackrock.bamboohr.com/careers/31.
+    (re.compile(r"https?://([^./]+)\.bamboohr\.com/"), "bamboohr"),
 ]
 
 

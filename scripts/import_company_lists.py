@@ -6,7 +6,8 @@ of company slugs, e.g. ["cohere", "cursor", ...].
 
 Usage:
     python3 import_company_lists.py --ashby ashby_companies.json \\
-        --greenhouse greenhouse_companies.json --lever lever_companies.json
+        --greenhouse greenhouse_companies.json --lever lever_companies.json \\
+        --bamboohr bamboohr_companies.json
 
 Existing registry rows are never overwritten — a company already in
 companies.csv (especially anything already "verified") keeps its current
@@ -33,7 +34,7 @@ def _title_case(token: str) -> str:
     return token.replace("-", " ").replace("_", " ").title()
 
 
-def import_lists(ashby_path: str = None, greenhouse_path: str = None, lever_path: str = None) -> None:
+def import_lists(ashby_path: str = None, greenhouse_path: str = None, lever_path: str = None, bamboohr_path: str = None) -> None:
     platform_sets = {}
     if ashby_path:
         with open(ashby_path) as f:
@@ -44,6 +45,9 @@ def import_lists(ashby_path: str = None, greenhouse_path: str = None, lever_path
     if lever_path:
         with open(lever_path) as f:
             platform_sets["lever"] = set(json.load(f))
+    if bamboohr_path:
+        with open(bamboohr_path) as f:
+            platform_sets["bamboohr"] = set(json.load(f))
 
     if not platform_sets:
         print("No input files given — nothing to do.")
@@ -101,5 +105,6 @@ if __name__ == "__main__":
     parser.add_argument("--ashby", help="Path to a JSON file: flat array of Ashby company slugs")
     parser.add_argument("--greenhouse", help="Path to a JSON file: flat array of Greenhouse company slugs")
     parser.add_argument("--lever", help="Path to a JSON file: flat array of Lever company slugs")
+    parser.add_argument("--bamboohr", help="Path to a JSON file: flat array of BambooHR company subdomains")
     args = parser.parse_args()
-    import_lists(ashby_path=args.ashby, greenhouse_path=args.greenhouse, lever_path=args.lever)
+    import_lists(ashby_path=args.ashby, greenhouse_path=args.greenhouse, lever_path=args.lever, bamboohr_path=args.bamboohr)

@@ -10,6 +10,7 @@ resolving companies you may never search.
 """
 
 from sources.ashby import search_ashby
+from sources.bamboohr import search_bamboohr
 from sources.gem import search_gem
 from sources.greenhouse import search_greenhouse
 from sources.lever import search_lever
@@ -19,6 +20,7 @@ _SEARCH_FUNCS = {
     "ashby": search_ashby,
     "gem": search_gem,
     "lever": search_lever,
+    "bamboohr": search_bamboohr,
 }
 
 
