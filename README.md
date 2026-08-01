@@ -17,47 +17,74 @@ application when a listing is actually worth the time.
 
 ## How it works
 
-**1. Search & Score** — Pulls live listings from five job board APIs
-(Remotive, Greenhouse, Ashby, Gem, Lever) across a self-correcting company
-registry. Every result gets a fast rubric score, a posting legitimacy read,
-a compensation reliability read, and a seniority-aware freshness rating, all
-before you open a single tab.
+**1. Search & Score** — Pulls live listings from six job board APIs
+(Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR) across a self-correcting
+company registry. Every result gets a fast rubric score, a posting
+legitimacy read, a compensation reliability read, and a seniority-aware
+freshness rating, all before you open a single tab.
 
 **2. Deep Dive** — On any listing worth a closer look, a full five-
-perspective panel evaluates real fit against your actual resume and returns
-a score, tier, gaps, resume fixes, and interview prep questions.
+perspective panel (Recruiter, Hiring Manager, Engineering Lead, Design Lead,
+Senior PM) evaluates real fit against your actual resume and returns a
+score, tier, gaps, resume fixes, and interview prep questions.
 
 **3. Tailor & Export** — Generates a tailored, ATS-safe resume and cover
 letter grounded in the panel's own findings, with a hard no-fabrication rule
 enforced in code, not just prompted for.
 
-**4. Dashboard & notifications** — Every evaluation is logged locally for
-comparison at a glance, with optional email summaries sent through your own
-SMTP account.
+**4. Auto-Fill Applications** — Opens the real application form in a visible
+browser and fills in what it confidently knows from your resume and saved
+profile facts, stopping short of submit every time — that boundary is
+enforced in code, not just prompted for, with zero exceptions.
 
-**5. Automatic fallback** — Optional secondary provider so a billing hiccup
+**5. Dashboard & notifications** — Every evaluation is logged locally,
+newest first, for comparison at a glance, with optional email summaries sent
+through your own SMTP account.
+
+**6. Automatic fallback** — Optional secondary provider so a billing hiccup
 mid-session doesn't stop your search.
 
 ## Stack
 
 - **Streamlit** — UI
 - **Anthropic API (Claude)** — tiered models for triage vs. deep evaluation
-- **Remotive, Greenhouse, Ashby, Gem, Lever APIs** — live job search, no scraping
+- **Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR APIs** — live job search, no scraping
+- **Playwright** — visible-browser application auto-fill
 - **requests + BeautifulSoup** — fallback extraction for manually-pasted URLs
 - **reportlab** — ATS-safe PDF rendering
 - **smtplib** (standard library) — optional email summaries via your own SMTP
 - **CSV** — zero-setup local storage, no database needed for an MVP
 
-## Run it
+## Getting started
 
-```bash
-pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...
-streamlit run app.py
-```
-
-Or paste your API key directly into the sidebar at runtime — it's never
-written to disk.
+1. **Clone and install dependencies**
+   ```bash
+   git clone https://github.com/GabeTHEGeek/maester.git
+   cd maester
+   pip install -r requirements.txt
+   ```
+2. **Install the Playwright browser** (one-time, needed for Auto-Fill Applications)
+   ```bash
+   playwright install chromium
+   ```
+3. **Add your Anthropic API key** — either export it or paste it into the
+   sidebar at runtime (never written to disk either way):
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...
+   ```
+   A DeepSeek key is optional but recommended as a fallback if Anthropic
+   billing hiccups mid-session.
+4. **Add your resume** — replace `sample_data/resume.md` with your own
+   (gitignored, stays local — see "Your resume" below), or just paste it
+   into the sidebar at runtime.
+5. **Run the app**
+   ```bash
+   streamlit run app.py
+   ```
+6. **(Optional) Set up local-only extras** — a `.env` file in the project
+   root can hold `LINKEDIN_URL`, `PORTFOLIO_URL`, `GITHUB_URL` (pre-fill the
+   sidebar's link fields) and `DEEPSEEK_API_KEY`. `.env` is gitignored, never
+   committed.
 
 ## Your resume
 
