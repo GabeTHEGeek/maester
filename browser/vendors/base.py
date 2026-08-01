@@ -86,12 +86,22 @@ _BASE_SCAN_FIELDS_JS = """
 
     // Native radio/checkbox GROUPS: each option is its own <input>, with
     // the group's real question text in a <label> that's a direct child of
-    // the wrapping <fieldset>, not attached to any single option. Treating
+    // the wrapping container, not attached to any single option. Treating
     // each option as its own unlabeled field would hide the actual question
     // from the mapping step entirely. Consolidate into ONE entry per group,
     // with an "options" list the fill step picks a specific option from.
+    //
+    // The wrapping container is a real <fieldset> on every site tested so
+    // far, but that's not the only way a group gets built - many component
+    // libraries use a plain <div role="group"> (or role="radiogroup")
+    // instead of semantic HTML. Confirmed directly via Playwright's own
+    // aria_snapshot() on a live Ashby form: <fieldset> already exposes an
+    // IMPLICIT "group" role (that's why it worked without this), but a
+    // future site using an explicit role instead of real <fieldset> would
+    // have been invisible to a fieldset-only check - checking for either
+    // generalizes without costing anything on sites that do use <fieldset>.
     if (type === 'radio' || type === 'checkbox') {
-      const fieldset = el.closest('fieldset');
+      const fieldset = el.closest('fieldset, [role="group"], [role="radiogroup"]');
       if (fieldset) {
         if (seenGroupFieldsets.has(fieldset)) return;
         seenGroupFieldsets.add(fieldset);
@@ -99,6 +109,17 @@ _BASE_SCAN_FIELDS_JS = """
         let groupLabel = '';
         const directLabel = fieldset.querySelector(':scope > label');
         if (directLabel) groupLabel = directLabel.innerText.trim();
+        if (!groupLabel) {
+          const ariaLabel = fieldset.getAttribute('aria-label');
+          if (ariaLabel) groupLabel = ariaLabel.trim();
+        }
+        if (!groupLabel) {
+          const labelledBy = fieldset.getAttribute('aria-labelledby');
+          if (labelledBy) {
+            const labelEl = document.getElementById(labelledBy.split(' ')[0]);
+            if (labelEl) groupLabel = labelEl.innerText.trim();
+          }
+        }
 
         const optionInputs = fieldset.querySelectorAll(`input[type="${type}"]`);
         const options = [];

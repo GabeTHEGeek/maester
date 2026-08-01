@@ -40,7 +40,7 @@ _ASHBY_SCAN_FIELDS_JS = """
     if (el.getAttribute('aria-hidden') === 'true') return;
 
     // Ashby's own custom "Yes/No" button-toggle widget.
-    if (type === 'checkbox' && el.getAttribute('tabindex') === '-1' && !el.closest('fieldset')) {
+    if (type === 'checkbox' && el.getAttribute('tabindex') === '-1' && !el.closest('fieldset, [role="group"], [role="radiogroup"]')) {
       const container = el.parentElement;
       const toggleButtons = container ? Array.from(container.querySelectorAll(':scope > button')) : [];
       if (toggleButtons.length >= 2) {
@@ -71,7 +71,7 @@ _ASHBY_SCAN_FIELDS_JS = """
     }
 
     if (type === 'radio' || type === 'checkbox') {
-      const fieldset = el.closest('fieldset');
+      const fieldset = el.closest('fieldset, [role="group"], [role="radiogroup"]');
       if (fieldset) {
         if (seenGroupFieldsets.has(fieldset)) return;
         seenGroupFieldsets.add(fieldset);
@@ -82,6 +82,17 @@ _ASHBY_SCAN_FIELDS_JS = """
         if (!groupLabel) {
           const titleEl = fieldset.querySelector('.ashby-application-form-question-title');
           if (titleEl) groupLabel = titleEl.innerText.trim();
+        }
+        if (!groupLabel) {
+          const ariaLabel = fieldset.getAttribute('aria-label');
+          if (ariaLabel) groupLabel = ariaLabel.trim();
+        }
+        if (!groupLabel) {
+          const labelledBy = fieldset.getAttribute('aria-labelledby');
+          if (labelledBy) {
+            const labelEl = document.getElementById(labelledBy.split(' ')[0]);
+            if (labelEl) groupLabel = labelEl.innerText.trim();
+          }
         }
 
         const optionInputs = fieldset.querySelectorAll(`input[type="${type}"]`);
