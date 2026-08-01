@@ -43,7 +43,17 @@ _SUBMIT_DENYLIST_SUBSTRINGS = ["submit", "send", "confirm", "finalize", "complet
 # completely unrelated to the job application, just reusing the same
 # generic label. Any candidate nested inside a known cookie-consent widget
 # is excluded outright, regardless of its own text.
-_NON_APPLICATION_ANCESTOR_MARKERS = ["onetrust", "ot-", "cookie", "consent", "gdpr"]
+#
+# "ot-" (OneTrust's real class prefix, e.g. "ot-sdk-btn") used to be listed
+# as its own short marker - confirmed directly this was too loose: it also
+# matches ordinary CSS-in-JS class names that happen to contain "ot-" as a
+# substring with no relation to OneTrust at all (a live BambooHR listing's
+# real Apply button was excluded this way - its Material-UI-derived class
+# included "...-button-root-ref", and "root-ref" contains "ot-ref"). Use
+# OneTrust's actual, specific prefix ("ot-sdk") instead of the bare "ot-"
+# fragment - still catches real OneTrust widgets, no longer catches
+# unrelated classes that merely contain the letters "ot-" somewhere.
+_NON_APPLICATION_ANCESTOR_MARKERS = ["onetrust", "ot-sdk", "cookie", "consent", "gdpr"]
 
 
 def _normalize_button_text(text: str) -> str:
@@ -245,9 +255,30 @@ class Adapter:
 
         if len(matches) > 1:
             same_text = {_normalize_button_text(el.inner_text()) for el in matches}
-            buttons_only = [el for el in matches if el.evaluate("e => e.tagName") == "BUTTON"]
-            if len(same_text) == 1 and len(buttons_only) == 1:
-                matches = buttons_only
+            if len(same_text) == 1:
+                # Every candidate already passed the strict allowlist/
+                # denylist/widget checks above and shares identical text -
+                # these are redundant instances of the same single action,
+                # not genuinely different destinations. Two distinct shapes
+                # confirmed directly on live pages:
+                #   1. A wrapper <a>/[role="button"] around a real <button>
+                #      (Rula/Ashby) - both match, same inherited text, but
+                #      only one is a real interactive element. Prefer it.
+                #   2. Several real, independent <button> elements repeating
+                #      the same action at different scroll positions on one
+                #      long listing (confirmed on a live BambooHR page:
+                #      three separate "Apply for This Job" buttons, one
+                #      pinned in a sidebar, others inline in the page flow -
+                #      clicking any one reveals the identical application
+                #      form in place). With no single button to prefer,
+                #      clicking the first is exactly as safe as clicking any
+                #      other, since the text match was already the strict
+                #      gate, not a fuzzy guess.
+                buttons_only = [el for el in matches if el.evaluate("e => e.tagName") == "BUTTON"]
+                if len(buttons_only) == 1:
+                    matches = buttons_only
+                else:
+                    matches = matches[:1]
 
         if len(matches) == 1:
             return matches[0]
