@@ -20,17 +20,17 @@ Your panel has five distinct perspectives. Each must reach an independent judgme
 do not let them converge into agreeable consensus. At least one panelist should raise
 a concern the others missed.
 
-1. Hiring Manager (Director of Product) — scope match, level match, domain relevance,
+1. Recruiter — hard screens: years of experience, must-haves, location/comp signals,
+   resume red flags, whether the resume survives a 30-second scan.
+2. Hiring Manager (Director of Product) — scope match, level match, domain relevance,
    whether this person can own the work on day one. Skeptical of title inflation and
    vague impact claims.
-2. Senior PM (peer) — craft. Real product sense, prioritization under constraints,
-   customer discovery, metrics fluency.
 3. Engineering Lead — technical fluency, how the candidate works with engineers,
    clear specs vs. throwing requirements over the wall.
 4. Design Lead — user empathy, collaboration with design, whether outcomes cited
    reflect user value or just shipped output.
-5. Recruiter — hard screens: years of experience, must-haves, location/comp signals,
-   resume red flags, whether the resume survives a 30-second scan.
+5. Senior PM (peer) — craft. Real product sense, prioritization under constraints,
+   customer discovery, metrics fluency.
 
 Score overall fit on this scale:
 - Strong fit (80-100): would likely get an interview, resume maps cleanly to must-haves
@@ -109,11 +109,11 @@ outside the JSON:
   "tier": "<Strong fit|Competitive|Stretch|Poor fit>",
   "tier_reason": "<one sentence>",
   "panelists": [
-    {"role": "Hiring Manager", "verdict": "<2-4 sentences>", "lean": "<short lean, e.g. 'interview' or 'pass'>"},
-    {"role": "Senior PM", "verdict": "...", "lean": "..."},
+    {"role": "Recruiter", "verdict": "<2-4 sentences>", "lean": "<short lean, e.g. 'interview' or 'pass'>"},
+    {"role": "Hiring Manager", "verdict": "...", "lean": "..."},
     {"role": "Engineering Lead", "verdict": "...", "lean": "..."},
     {"role": "Design Lead", "verdict": "...", "lean": "..."},
-    {"role": "Recruiter", "verdict": "...", "lean": "..."}
+    {"role": "Senior PM", "verdict": "...", "lean": "..."}
   ],
   "agreement": "<1-2 sentences on where the panel agrees>",
   "sharpest_disagreement": "<1-2 sentences on the sharpest disagreement>",
@@ -158,6 +158,28 @@ class PanelResult:
 
     def to_dict(self):
         return asdict(self)
+
+
+# Fixed display order for panelist verdicts: Recruiter first (hard-screen
+# gate, the fastest read), then Hiring Manager, Engineering Lead, Design
+# Lead, Senior PM last. The prompt's schema example already lists them in
+# this order, but an LLM's own response ordering is a request, not a
+# guarantee (the same lesson this project has already learned the hard way
+# for em dashes, word limits, and banned phrases - see CLAUDE.md) - sorted
+# here in code so the UI order is always correct regardless of what order
+# the model actually returns them in.
+_PANELIST_ORDER = ["Recruiter", "Hiring Manager", "Engineering Lead", "Design Lead", "Senior PM"]
+
+
+def _sort_panelists(panelists: list) -> list:
+    def sort_key(p):
+        role = p.get("role", "")
+        try:
+            return _PANELIST_ORDER.index(role)
+        except ValueError:
+            return len(_PANELIST_ORDER)  # unrecognized role - keep, but last
+
+    return sorted(panelists, key=sort_key)
 
 
 def _extract_json(text: str) -> dict:
@@ -237,7 +259,7 @@ Role: {role_title}
         fit_score=data["fit_score"],
         tier=data["tier"],
         tier_reason=data.get("tier_reason", ""),
-        panelists=data["panelists"],
+        panelists=_sort_panelists(data["panelists"]),
         agreement=data.get("agreement", ""),
         sharpest_disagreement=data.get("sharpest_disagreement", ""),
         top_gaps=data.get("top_gaps", []),

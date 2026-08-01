@@ -930,7 +930,10 @@ with tab_dashboard:
     if not rows:
         st.info("No deep-dive evaluations logged yet.")
     else:
-        rows_sorted = sorted(rows, key=lambda r: int(r.get("fit_score") or 0), reverse=True)
+        # Latest deep dive first - timestamps are ISO-format strings
+        # (log_result uses datetime.isoformat()), so a plain lexicographic
+        # sort is already chronological, no parsing needed.
+        rows_sorted = sorted(rows, key=lambda r: r.get("timestamp") or "", reverse=True)
         st.dataframe(
             rows_sorted,
             use_container_width=True,
