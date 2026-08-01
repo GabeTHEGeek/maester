@@ -157,6 +157,57 @@ the wrong data into a stranger's application, which is worse than leaving a
 field for the human to handle themselves."""
 
 
+def _resolve_location(contact_info: dict, key: str) -> str:
+    """Prefers the value the resume parser actually extracted, falls back
+    to the profile's saved fact when it didn't - confirmed directly this
+    matters: a resume that states location as a single "Baltimore, MD"
+    line isn't always split into separate city/state fields by contact-info
+    parsing the same way an employer's form expects them, and the real
+    fact (where the candidate actually lives) doesn't change per listing
+    any more than gender identity or work authorization does. Returns ""
+    if neither source has it - callers treat that as "no fact available,"
+    same as everywhere else."""
+    value = contact_info.get(key)
+    if value:
+        return value
+    saved = profile_answers_for(key)
+    return saved[0] if saved else ""
+
+
+# Questions asking whether the candidate has any PRIOR relationship with
+# THIS specific employer ("Have you ever been an employee or contractor at
+# Rula?", "...credentialed with Rula to see clients?") are, in the
+# overwhelmingly common case of a first-time applicant, directly answerable
+# from the resume: if the employer's name never appears anywhere in it,
+# there is no stated prior relationship to report, and "No" is the direct,
+# verifiable absence-of-evidence conclusion for exactly this narrow
+# question shape - not a guess, and not a case that needs a fresh LLM draft
+# reviewed before trusting it, the same reasoning already applied to
+# tenure and years-of-experience elsewhere in this file.
+_PRIOR_RELATIONSHIP_PHRASES = ["have you", "ever been", "previously"]
+
+
+def _resolve_prior_employer_relationship(question_text: str, company: str, resume_text: str) -> str:
+    """Returns "No" when the question is clearly asking about a past
+    relationship with `company` specifically and that company's name never
+    appears in the candidate's own resume. Returns "" (fall through to
+    normal drafting) for anything less clear-cut, INCLUDING the case where
+    the company's name DOES appear in the resume - a real prior
+    relationship needs actual judgment about its nature, not a flat rule,
+    so that case is deliberately left to drafting rather than guessed at
+    here."""
+    if not company:
+        return ""
+    text_lower = question_text.lower()
+    if company.lower() not in text_lower:
+        return ""
+    if not any(phrase in text_lower for phrase in _PRIOR_RELATIONSHIP_PHRASES):
+        return ""
+    if company.lower() in resume_text.lower():
+        return ""
+    return "No"
+
+
 # Keyword -> experience_years() key, checked in order (first match wins) so
 # a more specific domain ("product management") is checked before falling
 # back to "total" - confirmed the real fact this project's user gave
@@ -489,12 +540,15 @@ def open_and_fill(
                 _record(fields.fill_answer(pw_page, raw_entry, locator, contact_info["email"]), contact_info["email"], "no matching option offered")
             elif category == "phone" and contact_info.get("phone"):
                 _record(fields.fill_answer(pw_page, raw_entry, locator, contact_info["phone"]), contact_info["phone"], "no matching option offered")
-            elif category == "country" and contact_info.get("country"):
-                _record(fields.fill_answer(pw_page, raw_entry, locator, contact_info["country"]), contact_info["country"], "no matching option offered")
-            elif category == "city" and contact_info.get("city"):
-                _record(fields.fill_answer(pw_page, raw_entry, locator, contact_info["city"]), contact_info["city"], "no matching option offered")
-            elif category == "state" and contact_info.get("state"):
-                _record(fields.fill_answer(pw_page, raw_entry, locator, contact_info["state"]), contact_info["state"], "no matching option offered")
+            elif category == "country" and _resolve_location(contact_info, "country"):
+                value = _resolve_location(contact_info, "country")
+                _record(fields.fill_answer(pw_page, raw_entry, locator, value), value, "no matching option offered")
+            elif category == "city" and _resolve_location(contact_info, "city"):
+                value = _resolve_location(contact_info, "city")
+                _record(fields.fill_answer(pw_page, raw_entry, locator, value), value, "no matching option offered")
+            elif category == "state" and _resolve_location(contact_info, "state"):
+                value = _resolve_location(contact_info, "state")
+                _record(fields.fill_answer(pw_page, raw_entry, locator, value), value, "no matching option offered")
             elif category == "linkedin_url" and links.get("linkedin_url"):
                 _record(fields.fill_answer(pw_page, raw_entry, locator, links["linkedin_url"]), links["linkedin_url"], "no matching option offered")
             elif category == "portfolio_url" and links.get("portfolio_url"):
@@ -584,6 +638,12 @@ def open_and_fill(
                     # Fall through to drafting rather than flagging outright -
                     # the fact is confidently known, only this form's exact
                     # option wording didn't match "Yes"/"No" literally.
+                prior_relationship_answer = _resolve_prior_employer_relationship(question_text, company, resume_text)
+                if prior_relationship_answer:
+                    ok = fields.fill_answer(pw_page, raw_entry, locator, prior_relationship_answer)
+                    if ok:
+                        _record(True, prior_relationship_answer)
+                        continue
                 draft = fields._draft_custom_answer(
                     question_text, resume_text, company, role_title, api_key, deepseek_api_key,
                     options=raw_entry.get("options"), limit=raw_entry.get("limit"),

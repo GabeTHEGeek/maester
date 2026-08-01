@@ -645,10 +645,43 @@ filled, waiting for them. They review it and click submit themselves.
     logic that fills "N/A" only when the field is actually required,
     otherwise leaves it genuinely blank (flagged, not fabricated) exactly
     as before.
+30. **"Have you ever been an employee/contractor at [Company]?" and
+    location fields (state/city/country) moved from drafted-and-flagged
+    or silently skipped to fact-checked-in-code.** Direct user feedback:
+    "Why are you asking me that when you have my resume?" for the Rula
+    prior-employment questions, and "Current State of Residency is MD...
+    something you should know. You have the reference files and profile
+    data" for a location field that was silently skipped.
+    Two separate root causes, two separate fixes:
+    - `_resolve_prior_employer_relationship` (browser/autofill.py):
+      "have you ever been an employee/contractor at X" / "...credentialed
+      with X" questions are, for a first-time applicant, directly
+      verifiable against the resume - if the employer's name never
+      appears in it, "No" is the actual, checkable fact, not a guess.
+      Deliberately still falls through to normal drafting (flagged, as
+      before) in the one case this can't answer safely: the company DOES
+      appear in the resume, where the real nature of that relationship
+      needs actual judgment, not a flat rule.
+    - `_resolve_location` (browser/autofill.py): the "state"/"city"/
+      "country" categories only ever checked resume-parsed contact_info,
+      with no fallback to the profile's own saved city/state/country facts
+      - so a form whose combobox didn't get auto-split from the resume's
+      contact block by parse_contact_info fell all the way through to
+      silently flagged, even though the real answer was already sitting in
+      sample_data/profile.json. Now checks contact_info first, profile
+      second, same "known fact, don't ask twice" precedent as every other
+      profile-backed category.
+    Re-verified live on Rula: both prior-relationship questions and
+    "Current State of Residency" moved from flagged to auto-mapped: no
+    resume/profile-derivable question is left unresolved anymore.
+    Deliberately NOT extended to genuinely creative/subjective
+    custom_questions ("What snack fuels your best ideas?", "describe a
+    time you redesigned a workflow") - those still get drafted and flagged
+    for review, since there's no fact in the resume to check them against.
 
 ## Open questions
 
-None remaining as of this draft. All twenty-nine forks raised across
-drafting and real-world testing are resolved above. Item #26 names one
-real, deliberately-deferred follow-up (stale-browser cleanup on a mid-run
-error) rather than a fork that's actually closed.
+None remaining as of this draft. All thirty forks raised across drafting
+and real-world testing are resolved above. Item #26 names one real,
+deliberately-deferred follow-up (stale-browser cleanup on a mid-run error)
+rather than a fork that's actually closed.
