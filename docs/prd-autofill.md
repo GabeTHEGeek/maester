@@ -613,10 +613,42 @@ filled, waiting for them. They review it and click submit themselves.
     same stable 14/22 result, no errors. The real, required "Resume" field
     elsewhere on the form already fills correctly without this risk, so
     nothing was actually lost by not automating this one.
+29. **Years-of-experience gate questions and "Middle Name" moved from
+    per-listing drafting/skip to static profile facts - a real user
+    correction, not a hypothetical improvement.** Feedback on a live Rula
+    run, verbatim: "Why are you drafting answers that you should already
+    know. I have over 15 years in tech, 7+ in product... you shouldn't need
+    an approval." "Do you have at least N years of X experience" questions
+    were originally excluded from data/profile.py on purpose (see that
+    file's docstring, pre-edit) - reasoned as depending on the number in
+    the question, not a static fact. In practice this meant redrafting and
+    reflagging the same true "Yes" on every single listing. Fixed by adding
+    a static `experience_years` fact ({"total": 15, "product_management":
+    7}) and a small deterministic resolver,
+    `browser.autofill._resolve_experience_threshold`, that parses the
+    threshold number out of the question text, picks the right domain
+    (checking for "product management" before falling back to "total" -
+    the two numbers differ, so a domain-specific gate question needs the
+    domain-specific fact, not the total), and answers Yes/No without ever
+    calling the drafting LLM or flagging it as unreviewed. Falls through to
+    the existing drafting path unchanged if the question doesn't parse as a
+    numeric threshold, or if the resolved answer isn't offered as a real
+    option on this particular form.
+    Separately, the same feedback covered "Middle Name": "I have no Middle
+    name, should be blank or N/A if required." This field was previously
+    lumped into the generic "skip" category (deliberately, since a made-up
+    middle name would be fabricating a fact) - the fix isn't drafting one,
+    it's recognizing "N/A" is the honest, standard answer for a REQUIRED
+    field when no middle name exists. Added a dedicated "middle_name"
+    category, a `required` flag now captured directly in both vendor
+    adapters' field-scanning JS (`el.required || aria-required`), and
+    logic that fills "N/A" only when the field is actually required,
+    otherwise leaves it genuinely blank (flagged, not fabricated) exactly
+    as before.
 
 ## Open questions
 
-None remaining as of this draft. All twenty-eight forks raised across
+None remaining as of this draft. All twenty-nine forks raised across
 drafting and real-world testing are resolved above. Item #26 names one
 real, deliberately-deferred follow-up (stale-browser cleanup on a mid-run
 error) rather than a fork that's actually closed.

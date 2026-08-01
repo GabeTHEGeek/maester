@@ -7,5 +7,7 @@
   "how_did_you_hear": ["LinkedIn"],
   "city": ["Austin"],
   "state": ["Texas"],
-  "country": ["United States"]
+  "country": ["United States"],
+  "middle_name": ["N/A"],
+  "experience_years": {"total": 10, "product_management": 5}
 }

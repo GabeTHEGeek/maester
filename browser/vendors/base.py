@@ -172,6 +172,7 @@ _BASE_SCAN_FIELDS_JS = """
       placeholder: el.getAttribute('placeholder') || '',
       aria_label: el.getAttribute('aria-label') || '',
       label_text: labelText,
+      required: el.required || el.getAttribute('aria-required') === 'true',
     };
     // Native <select>: country/university-style selects with hundreds of
     // real <option> elements are common enough to need their own path,

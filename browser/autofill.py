@@ -55,13 +55,14 @@ explicitly chose to auto-check it after being told exactly what it means).
 """
 
 import json
+import re
 
 from playwright.sync_api import sync_playwright
 
 from browser import fields
 from browser.vendors import get_adapter
 from data.answer_bank import find_answer
-from data.profile import known_topics, profile_answers_for
+from data.profile import experience_years, known_topics, profile_answers_for
 from engines.llm_fallback import call_with_fallback
 from utils.fetch_job import check_liveness, fetch_job_page
 
@@ -113,7 +114,7 @@ Valid categories:
   field, since the same form has been observed categorizing this
   inconsistently between otherwise-identical runs.
 - "skip" (not "custom_question") for any OTHER name-adjacent field that
-  isn't first/last/whole name - "Middle Name," "Nickname," "Preferred
+  isn't first/last/whole/middle name - "Nickname," "Preferred
   Pronunciation," and similar - since there's no real answer to draft for
   these and guessing would mean inventing a fact, not answering a question.
 - "email", "phone", "country", "city", "state" - standard contact fields
@@ -137,6 +138,11 @@ Valid categories:
   only ever filled from a pre-approved saved answer, NEVER freshly drafted,
   since a resume has no basis to state a person's identity and guessing
   would mean fabricating it.
+- "middle_name" - a field specifically asking for a middle name. Distinct
+  from "skip" on purpose: there's no real middle name to give, but "N/A" is
+  the standard, non-fabricated convention for a REQUIRED field asking for
+  one - filled automatically when required, left blank (flagged) when
+  optional. Never "custom_question" or "skip" for this.
 - "consent_checkbox" - a checkbox agreeing to the employer's privacy policy
   or to processing of the candidate's own application/survey data as part
   of applying. NOT a marketing-email opt-in or anything unrelated to the
@@ -149,6 +155,51 @@ Valid categories:
 Only ever return "skip" if uncertain - a wrong guess on a mapped field fills
 the wrong data into a stranger's application, which is worse than leaving a
 field for the human to handle themselves."""
+
+
+# Keyword -> experience_years() key, checked in order (first match wins) so
+# a more specific domain ("product management") is checked before falling
+# back to "total" - confirmed the real fact this project's user gave
+# directly: 15 years total tech experience, 7+ specifically in product
+# management, and a form asking "5+ years of Product Management experience"
+# needs the 7, not the 15, or a genuinely false "No" could result for a
+# domain-specific threshold this candidate doesn't clear on the total alone.
+_EXPERIENCE_DOMAIN_KEYWORDS = [
+    ("product_management", ["product management", "product manager", "as a pm", "product management experience"]),
+]
+
+_YEARS_THRESHOLD_RE = re.compile(r"(\d+)\s*\+?\s*years?", re.IGNORECASE)
+
+
+def _resolve_experience_threshold(question_text: str) -> str:
+    """Deterministically answers a "do you have at least N years of X
+    experience" gate question from the static experience_years() profile
+    fact, instead of drafting a fresh answer (and flagging it for review)
+    every single time for a fact that never actually changes per listing.
+    Returns "Yes"/"No" when the question text names a numeric year
+    threshold and a matching (or "total") experience fact is on file, ""
+    otherwise - callers must fall through to normal drafting on "", since a
+    question this can't confidently parse is exactly the kind of ambiguity
+    this function isn't meant to guess through."""
+    years = experience_years()
+    if not years:
+        return ""
+    match = _YEARS_THRESHOLD_RE.search(question_text)
+    if not match:
+        return ""
+    text_lower = question_text.lower()
+    if "year" not in text_lower or "experience" not in text_lower:
+        return ""
+    threshold = int(match.group(1))
+    domain = "total"
+    for key, keywords in _EXPERIENCE_DOMAIN_KEYWORDS:
+        if any(kw in text_lower for kw in keywords):
+            domain = key
+            break
+    actual = years.get(domain, years.get("total"))
+    if actual is None:
+        return ""
+    return "Yes" if actual >= threshold else "No"
 
 
 def _try_topic_answer(page, raw_entry: dict, locator, topic) -> tuple:
@@ -450,6 +501,16 @@ def open_and_fill(
                 _record(fields.fill_answer(pw_page, raw_entry, locator, links["portfolio_url"]), links["portfolio_url"], "no matching option offered")
             elif category == "github_url" and links.get("github_url"):
                 _record(fields.fill_answer(pw_page, raw_entry, locator, links["github_url"]), links["github_url"], "no matching option offered")
+            elif category == "middle_name":
+                # No real middle name to give. "N/A" is a standard,
+                # non-fabricated convention for a REQUIRED field - filling
+                # it isn't inventing a fact, it's stating the actual fact
+                # ("none"). An optional field is left genuinely blank
+                # instead, same as before this category existed.
+                if raw_entry.get("required"):
+                    _record(fields.fill_answer(pw_page, raw_entry, locator, "N/A"), "N/A", "no matching option offered")
+                else:
+                    flagged.append(f"{field_label} (no middle name — optional, left blank)")
             elif category == "resume_upload" and resume_pdf_path:
                 locator.set_input_files(resume_pdf_path)
                 auto_mapped.append(field_label)
@@ -513,18 +574,27 @@ def open_and_fill(
                         bank_entry["answer"],
                         f"saved answer {bank_entry['answer']!r} wasn't offered as an option on this form",
                     )
+                    continue
+                experience_answer = _resolve_experience_threshold(question_text)
+                if experience_answer:
+                    ok = fields.fill_answer(pw_page, raw_entry, locator, experience_answer)
+                    if ok:
+                        _record(True, experience_answer)
+                        continue
+                    # Fall through to drafting rather than flagging outright -
+                    # the fact is confidently known, only this form's exact
+                    # option wording didn't match "Yes"/"No" literally.
+                draft = fields._draft_custom_answer(
+                    question_text, resume_text, company, role_title, api_key, deepseek_api_key,
+                    options=raw_entry.get("options"), limit=raw_entry.get("limit"),
+                )
+                filled_ok = fields.fill_answer(pw_page, raw_entry, locator, draft)
+                if filled_ok:
+                    if not raw_entry.get("options"):
+                        pw_page.evaluate(fields._FLAG_BANNER_JS, index)
+                    flagged.append(f"{field_label} (unreviewed AI draft)")
                 else:
-                    draft = fields._draft_custom_answer(
-                        question_text, resume_text, company, role_title, api_key, deepseek_api_key,
-                        options=raw_entry.get("options"), limit=raw_entry.get("limit"),
-                    )
-                    filled_ok = fields.fill_answer(pw_page, raw_entry, locator, draft)
-                    if filled_ok:
-                        if not raw_entry.get("options"):
-                            pw_page.evaluate(fields._FLAG_BANNER_JS, index)
-                        flagged.append(f"{field_label} (unreviewed AI draft)")
-                    else:
-                        flagged.append(f"{field_label} (drafted answer wasn't a valid option on this form)")
+                    flagged.append(f"{field_label} (drafted answer wasn't a valid option on this form)")
             else:
                 flagged.append(field_label)
         except Exception as e:

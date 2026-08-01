@@ -165,6 +165,7 @@ _ASHBY_SCAN_FIELDS_JS = """
       placeholder: el.getAttribute('placeholder') || '',
       aria_label: el.getAttribute('aria-label') || '',
       label_text: labelText,
+      required: el.required || el.getAttribute('aria-required') === 'true',
     };
     if (el.tagName.toLowerCase() === 'select') {
       field.options = Array.from(el.options).map(o => ({value: o.value, label: o.text.trim()}));
