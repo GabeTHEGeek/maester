@@ -24,6 +24,7 @@ FIELDS = [
     "salary",
     "legitimacy_tier",
     "comp_reliability",
+    "role_profile",
 ]
 
 
@@ -70,6 +71,7 @@ def log_result(result) -> None:
                 "salary": result.salary,
                 "legitimacy_tier": result.legitimacy_tier,
                 "comp_reliability": result.comp_reliability,
+                "role_profile": result.role_profile,
             }
         )
 

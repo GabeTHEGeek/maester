@@ -12,23 +12,27 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from role_profiles import DEFAULT_PROFILE_ID, RoleProfile, get_profile
 from utils.extract import compute_current_role_tenure
 from engines.llm_fallback import call_with_fallback, extract_json
 
 QUICK_MODEL = "claude-haiku-4-5-20251001"
 
-RUBRIC_SYSTEM_PROMPT = """You score how well a candidate's resume fits a job listing
+
+def _build_system_prompt(role_profile: RoleProfile) -> str:
+    """Everything here is either generic to any role (the scoring scale, the
+    legitimacy/comp signals, the JSON schema) or supplied by the active
+    role_profiles.RoleProfile (the title-inflation caution and the
+    Dimensions block) - see role_profiles/base.py for what's role-specific
+    vs. candidate-specific and why."""
+    return f"""You score how well a candidate's resume fits a job listing
 across weighted dimensions, the way an ATS-savvy recruiter would triage a stack of
 applications fast. Be honest and calibrated — most listings should NOT score above 4.0.
 
 CRITICAL — do not confuse keyword overlap with fit. A title or description sharing
-buzzwords with the resume (e.g. both mention "Agentic AI," "Product Manager," "AI/ML")
-is NOT evidence of fit by itself. Titles can be misleading — a "Product Manager" or
-"Staff Product Manager" title sometimes describes a hands-on technical/engineering
-role wearing a product-sounding name (check for signals like: owns architecture
-decisions, writes/reviews production code, "AI-native" tooling requirements aimed at
-engineers, reports into engineering rather than product). Score based on the
-listing's actual substantive requirements, not surface term matching against the resume.
+buzzwords with the resume is NOT evidence of fit by itself. {role_profile.rubric_title_inflation_note}
+Score based on the listing's actual substantive requirements, not surface term
+matching against the resume.
 
 CANDIDATE'S AI PROFILE: applied AI/LLM product engineering (prompt engineering,
 multi-model orchestration, agentic workflow design, API integration) — NOT deep ML,
@@ -36,20 +40,7 @@ NOT ML infra/deployment, NOT classical ML. A listing wanting model training, ML 
 ownership, or research-scientist depth is a real gap even if it says "AI."
 
 Dimensions:
-- Role/Skills match (gate: if this is weak, OR if the role's actual substance is
-  technical/engineering despite a PM-sounding title, OR if it requires deep
-  ML/infra depth the candidate doesn't have, the overall score has a CEILING of
-  2.5 — not a fixed value of 2.5. Within that gated range, still use real
-  judgment about how severe the specific gap is: a role with some tangential
-  overlap (e.g., adjacent domain, transferable skills) can land higher within
-  the range, around 2.0-2.5, while a role with no realistic alignment at all
-  should land lower, around 1.0-1.5. Two different listings that fail the gate
-  for two different reasons should very rarely produce the identical number —
-  if they keep landing on exactly the same score, that's a sign of defaulting
-  to a round anchor value instead of actually differentiating by severity.)
-- Seniority fit (over- or under-leveled counts against it)
-- Domain/industry relevance
-- Location/remote feasibility given what the listing states
+{role_profile.rubric_dimensions}
 
 Use the full decimal range meaningfully across every dimension, not just the
 gated one — two listings with genuinely different degrees of fit, even within
@@ -74,13 +65,13 @@ inflated by commission/OTE/"up to" framing), or "Unknown" (no usable salary data
 do not invent a number).
 
 Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
-{
+{{
   "score": <float 1.0-5.0>,
   "reason": "<one sentence, specific, not generic>",
   "legitimacy_tier": "<High Confidence|Proceed with Caution|Suspicious>",
   "legitimacy_note": "<one short neutral phrase>",
   "comp_reliability": "<High|Medium|Low|Unknown>"
-}
+}}
 """
 
 
@@ -101,6 +92,7 @@ class QuickScore:
     legitimacy_note: str = ""
     comp_reliability: str = ""
     published: str = ""
+    role_profile: str = DEFAULT_PROFILE_ID
 
 
 def _score_to_grade(score: float) -> str:
@@ -122,9 +114,10 @@ def _score_to_grade(score: float) -> str:
     return "F"
 
 
-def _score_one(resume_text: str, job: dict, api_key: str, deepseek_api_key: str = "") -> QuickScore:
+def _score_one(resume_text: str, job: dict, api_key: str, role_profile: RoleProfile, deepseek_api_key: str = "") -> QuickScore:
     tenure_note = compute_current_role_tenure(resume_text)
     tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
+    system_prompt = _build_system_prompt(role_profile)
 
     user_prompt = f"""RESUME:
 {resume_text}
@@ -136,7 +129,7 @@ Location: {job['location']}
 Description: {job['description']}
 """
     text, _provider = call_with_fallback(
-        system_prompt=RUBRIC_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         user_prompt=user_prompt,
         anthropic_api_key=api_key,
         anthropic_model=QUICK_MODEL,
@@ -151,7 +144,7 @@ Description: {job['description']}
         # just failed outright instead of getting a chance to retry with
         # more room, unlike the other two engines.
         text, _provider = call_with_fallback(
-            system_prompt=RUBRIC_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             anthropic_api_key=api_key,
             anthropic_model=QUICK_MODEL,
@@ -175,6 +168,7 @@ Description: {job['description']}
         legitimacy_tier=data.get("legitimacy_tier", ""),
         legitimacy_note=data.get("legitimacy_note", ""),
         comp_reliability=data.get("comp_reliability", ""),
+        role_profile=role_profile.id,
     )
 
 
@@ -182,14 +176,19 @@ def batch_score(
     resume_text: str,
     jobs: list[dict],
     api_key: str,
+    role_profile: RoleProfile = None,
     deepseek_api_key: str = "",
     max_workers: int = 5,
 ) -> list[QuickScore]:
-    """Score every job in `jobs` against `resume_text` in parallel, return ranked results."""
+    """Score every job in `jobs` against `resume_text` in parallel, return
+    ranked results. `role_profile` selects which role_profiles.RoleProfile
+    frames the scoring (title-inflation caution, Dimensions gate) - defaults
+    to Product Manager for callers that don't pass one explicitly."""
+    role_profile = role_profile or get_profile(DEFAULT_PROFILE_ID)
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_score_one, resume_text, job, api_key, deepseek_api_key): job
+            executor.submit(_score_one, resume_text, job, api_key, role_profile, deepseek_api_key): job
             for job in jobs
         }
         for future in as_completed(futures):
@@ -211,6 +210,7 @@ def batch_score(
                         location=job.get("location", ""),
                         published=job.get("published", ""),
                         salary=job.get("salary", ""),
+                        role_profile=role_profile.id,
                     )
                 )
     results.sort(key=lambda r: r.score, reverse=True)
@@ -241,4 +241,5 @@ def quick_score_from_cache(row: dict, job_id: str) -> QuickScore:
         legitimacy_note=row.get("legitimacy_note", ""),
         comp_reliability=row.get("comp_reliability", ""),
         published=row.get("published", ""),
+        role_profile=row.get("role_profile") or DEFAULT_PROFILE_ID,
     )

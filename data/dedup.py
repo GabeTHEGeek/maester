@@ -7,6 +7,13 @@ source) gets its cached score reused instead of burning another API call.
 This is deliberately separate from tracker.py (which only logs Deep Dive
 results): scan history covers every listing that ever entered a quick scan,
 regardless of whether you dove deeper on it.
+
+Cache reuse is scoped per role profile (see role_profiles/): the same URL
+scored under Product Manager and Customer Success searches are two
+genuinely different evaluations (different rubric, different fit gate) -
+reusing one for the other would silently show a stale, wrong-lens score.
+app.py checks the cached row's own "role_profile" field against the
+currently active profile before treating a URL as "already scanned."
 """
 
 import csv
@@ -31,6 +38,7 @@ FIELDS = [
     "comp_reliability",
     "published",
     "last_scanned",
+    "role_profile",
 ]
 
 
@@ -85,5 +93,6 @@ def record_scans(quick_scores: list) -> None:
                     "comp_reliability": r.comp_reliability,
                     "published": r.published,
                     "last_scanned": now,
+                    "role_profile": r.role_profile,
                 }
             )

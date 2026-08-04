@@ -13,12 +13,13 @@ is told to leave it alone rather than paper over the gap.
 import json
 import re
 
+from role_profiles import DEFAULT_PROFILE_ID, RoleProfile, get_profile
 from utils.extract import compute_current_role_tenure
 from engines.llm_fallback import call_with_fallback, extract_json
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
 
-TAILOR_SYSTEM_PROMPT = """You tailor a candidate's resume and draft a cover letter
+_TAILOR_SYSTEM_PROMPT_TEMPLATE = """You tailor a candidate's resume and draft a cover letter
 for one specific job listing, using the resume, the job listing, and a hiring
 panel's own findings (top gaps, suggested resume fixes) as input.
 
@@ -48,20 +49,7 @@ implying it in tailored language would be exactly the kind of misrepresentation
 the hard rules above forbid. If the JD wants that kind of depth, that's a real gap
 to leave visible, not word around.
 
-ARCHETYPE DETECTION: classify the listing into one of these product-management
-archetypes (or a hybrid of two), based on signals in the JD:
-- AI Product Strategy — "roadmap", "vision", "0-to-1", "product strategy"
-- Agentic/Automation Product — "agent", "automation", "workflow", "orchestration"
-- AI Platform/Infrastructure PM — "data pipeline", "platform", "API", "developer tools"
-- AI-Forward Growth/Creator Product — "community", "engagement", "creator", "retention"
-- AI Marketplace/Two-Sided Platform — "marketplace", "supply/demand", "matching"
-- AI Transformation/Enablement — "change management", "adoption", "enablement"
-
-State the detected archetype, then let it inform which of the candidate's own
-experience gets foregrounded: e.g. a Creator Product archetype should lead with
-the Twitch/community work; a Marketplace archetype should lead with the
-WarrantyPilot founder work; an Agentic/Automation archetype should lead with the
-AI agent projects (Karla, Rudy, Brand Companion Agent).
+__ARCHETYPE_BLOCK__
 
 KEYWORD PLACEMENT: extract 12-18 specific terms from the JD that the candidate
 can honestly claim (skills, tools, methodologies actually present in the
@@ -292,7 +280,7 @@ parallel accomplishments listed side by side with no stated connection.
 Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
 {
   "candidate_name": "<parsed from the resume header, exactly as written>",
-  "candidate_tagline": "<short role/focus line, e.g. 'Senior Product Manager | AI Product Builder' — derived from the resume's own summary/headline, optionally leaning toward the detected archetype, never inventing a title the candidate doesn't hold>",
+  "candidate_tagline": "<short role/focus line — derived from the resume's own summary/headline, optionally leaning toward the detected archetype, never inventing a title the candidate doesn't hold>",
   "detected_archetype": "<one of the archetypes above, or a hybrid>",
   "tailored_resume_markdown": "<the full revised resume in Markdown>",
   "core_competencies": ["<phrase 1>", "<phrase 2>", "..."],
@@ -301,6 +289,18 @@ Respond ONLY with valid JSON, no markdown fences, no prose outside the JSON:
   "changes_summary": ["<one-line description of change 1>", "<change 2>", "..."]
 }
 """
+
+
+def _build_system_prompt(role_profile: RoleProfile) -> str:
+    """Everything here is shared candidate context (hard no-fabrication
+    rules, this candidate's real AI positioning, bullet/format/cover-letter
+    rules) except the ARCHETYPE DETECTION section, which is supplied by the
+    active role_profiles.RoleProfile - see role_profiles/base.py for why
+    the archetype list and its foregrounding guidance are role-specific
+    while everything else about the candidate stays fixed."""
+    return _TAILOR_SYSTEM_PROMPT_TEMPLATE.replace(
+        "__ARCHETYPE_BLOCK__", role_profile.tailor_archetype_block
+    )
 
 
 def generate_tailored_materials(
@@ -313,6 +313,7 @@ def generate_tailored_materials(
     api_key: str,
     model: str = TAILOR_MODEL,
     deepseek_api_key: str = "",
+    role_profile: RoleProfile = None,
 ) -> dict:
     """Returns {"candidate_name": str, "candidate_tagline": str,
     "detected_archetype": str, "tailored_resume_markdown": str,
@@ -320,7 +321,11 @@ def generate_tailored_materials(
     "keywords_emphasized": list, "changes_summary": list}.
     Links (LinkedIn/portfolio/GitHub) are intentionally NOT handled here —
     they're rendered directly into the PDF header by pdf_export.py, not
-    written into the letter body by the model."""
+    written into the letter body by the model. `role_profile` selects
+    which role_profiles.RoleProfile's archetypes classify the listing -
+    defaults to Product Manager for callers that don't pass one explicitly."""
+    role_profile = role_profile or get_profile(DEFAULT_PROFILE_ID)
+    system_prompt = _build_system_prompt(role_profile)
     tenure_note = compute_current_role_tenure(resume_text)
     tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
 
@@ -338,7 +343,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
 """
 
     text, _provider = call_with_fallback(
-        system_prompt=TAILOR_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         user_prompt=user_prompt,
         anthropic_api_key=api_key,
         anthropic_model=model,
@@ -351,7 +356,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
     except (ValueError, json.JSONDecodeError):
         # Same truncation safety net as the deep-dive panel.
         text, _provider = call_with_fallback(
-            system_prompt=TAILOR_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             anthropic_api_key=api_key,
             anthropic_model=model,

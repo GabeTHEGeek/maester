@@ -47,54 +47,6 @@ def _strip_level_words(query: str) -> str:
     return re.sub(r"\s+", " ", q).strip()
 
 
-# A listing's title must contain at least one of these to be considered a PM
-# role at all. This exists because Remotive's search matches full description
-# text, not just the title — a query like "product" will otherwise return any
-# posting that mentions the word "product" anywhere (Accounts Payable, Patient
-# Care, Freelance Writer, etc. all slipped through without this).
-DEFAULT_TITLE_INCLUDE = [
-    "product manager",
-    "product owner",
-    "product lead",
-    "head of product",
-    "director of product",
-    "vp of product",
-    "vp, product",
-    "group product manager",
-    "technical product manager",
-    "product management",
-    "product strategist",
-    "outcomes manager",
-    "product director",
-    "chief product officer",
-    "cpo",
-]
-
-# Titles containing these words are hands-on IC engineering roles, not PM roles,
-# even when they also contain "product" or "AI" in the title. Excluded by default
-# so a PM search doesn't get diluted with roles that were never going to fit.
-DEFAULT_TITLE_EXCLUDE = [
-    "software engineer",
-    "product engineer",
-    "backend engineer",
-    "frontend engineer",
-    "full-stack",
-    "fullstack",
-    "full stack",
-    "devops",
-    "architect",
-    "developer",
-    "data engineer",
-    "ml engineer",
-    "machine learning engineer",
-    "qa engineer",
-    "sre",
-    "rails engineer",
-    "staff engineer",
-    "senior engineer",
-]
-
-
 def _fetch_raw(query: str, category: str | None) -> list[dict]:
     params = {"search": query}
     if category:
@@ -150,18 +102,21 @@ def search_jobs(
     query: str,
     limit: int = 15,
     category: str | None = "product",
-    exclude_titles: list[str] | None = DEFAULT_TITLE_EXCLUDE,
-    require_title_keywords: list[str] | None = DEFAULT_TITLE_INCLUDE,
+    exclude_titles: list[str] | None = None,
+    require_title_keywords: list[str] | None = None,
 ) -> tuple[list[dict], dict]:
     """
     Search live remote job listings matching `query`.
 
     `category`: Remotive category slug to try first (e.g. "product"). This is a
     soft preference, not a hard filter — Remotive's own category tagging is
-    inconsistent (a real PM listing can be tagged "all-others"), so if the
+    inconsistent (a real listing can be tagged "all-others"), so if the
     category-scoped search comes back empty, this automatically retries without
     the category restriction before giving up. `exclude_titles`/`require_title_keywords`
-    do the real categorization work via the title, not Remotive's tags.
+    do the real categorization work via the title, not Remotive's tags - the
+    caller (app.py) supplies these from the active role_profiles.RoleProfile;
+    this module has no opinion of its own about what kind of role is wanted,
+    same as every other job source.
     `exclude_titles`: case-insensitive substrings; any listing whose title contains
     one of these is dropped before scoring. Pass an empty list or None to disable.
     `require_title_keywords`: if set, a listing's title must contain at least one

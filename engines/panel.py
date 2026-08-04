@@ -7,27 +7,18 @@ Core logic for Maester: runs a job listing + resume through a simulated
 import json
 from dataclasses import asdict, dataclass
 
+from role_profiles import DEFAULT_PROFILE_ID, RoleProfile, get_profile
 from utils.extract import compute_current_role_tenure
 from engines.llm_fallback import call_with_fallback, extract_json
 
 
-SYSTEM_PROMPT = """You are a simulated hiring panel evaluating a candidate against a job listing.
+_SYSTEM_PROMPT_TEMPLATE = """You are a simulated hiring panel evaluating a candidate against a job listing.
 
 Your panel has five distinct perspectives. Each must reach an independent judgment —
 do not let them converge into agreeable consensus. At least one panelist should raise
 a concern the others missed.
 
-1. Recruiter — hard screens: years of experience, must-haves, location/comp signals,
-   resume red flags, whether the resume survives a 30-second scan.
-2. Hiring Manager (Director of Product) — scope match, level match, domain relevance,
-   whether this person can own the work on day one. Skeptical of title inflation and
-   vague impact claims.
-3. Engineering Lead — technical fluency, how the candidate works with engineers,
-   clear specs vs. throwing requirements over the wall.
-4. Design Lead — user empathy, collaboration with design, whether outcomes cited
-   reflect user value or just shipped output.
-5. Senior PM (peer) — craft. Real product sense, prioritization under constraints,
-   customer discovery, metrics fluency.
+__PERSONA_LIST__
 
 Score overall fit on this scale:
 - Strong fit (80-100): would likely get an interview, resume maps cleanly to must-haves
@@ -58,9 +49,10 @@ serving infra, or scaling systems), and NOT classical ML (no regression,
 classification, or embeddings work). A listing mentioning "AI" or "ML" is not
 automatically a good match — check whether it actually wants applied LLM product
 work (strong fit) versus deep ML research, model training, or ML infra ownership
-(a real gap, not something to paper over). The Engineering Lead panelist in
-particular should apply this distinction rather than crediting general "AI
-experience" for roles that need infra/research depth the candidate hasn't built.
+(a real gap, not something to paper over). Whichever panelist is best positioned
+to judge technical/domain depth should apply this distinction rather than
+crediting general "AI experience" for roles that need infra/research depth the
+candidate hasn't built.
 
 The resume is provided as structured Markdown with clear section headers (##) and
 role subsections (###). When a panelist claims a match or a gap, ground it in a
@@ -106,11 +98,7 @@ outside the JSON:
   "tier": "<Strong fit|Competitive|Stretch|Poor fit>",
   "tier_reason": "<one sentence>",
   "panelists": [
-    {"role": "Recruiter", "verdict": "<2-4 sentences>", "lean": "<short lean, e.g. 'interview' or 'pass'>"},
-    {"role": "Hiring Manager", "verdict": "...", "lean": "..."},
-    {"role": "Engineering Lead", "verdict": "...", "lean": "..."},
-    {"role": "Design Lead", "verdict": "...", "lean": "..."},
-    {"role": "Senior PM", "verdict": "...", "lean": "..."}
+__PANELIST_SCHEMA__
   ],
   "agreement": "<1-2 sentences on where the panel agrees>",
   "sharpest_disagreement": "<1-2 sentences on the sharpest disagreement>",
@@ -125,6 +113,27 @@ outside the JSON:
   "comp_notes": "<1-2 sentences>"
 }
 """
+
+
+def _build_system_prompt(role_profile: RoleProfile) -> str:
+    """Fills in the two role-specific spots in _SYSTEM_PROMPT_TEMPLATE from
+    the active role_profiles.RoleProfile's panel_personas - a numbered
+    prose list (matching the template's original hand-written style) and
+    the matching JSON schema example lines, kept in the same order
+    (Recruiter first) as _sort_panelists enforces on the response."""
+    persona_lines = "\n".join(
+        f"{i}. {p.role}{p.criteria}" for i, p in enumerate(role_profile.panel_personas, start=1)
+    )
+    schema_lines = ",\n".join(
+        f'    {{"role": "{p.role}", "verdict": "{"<2-4 sentences>" if i == 0 else "..."}", '
+        f'"lean": "{"<short lean, e.g. \'interview\' or \'pass\'>" if i == 0 else "..."}"}}'
+        for i, p in enumerate(role_profile.panel_personas)
+    )
+    return (
+        _SYSTEM_PROMPT_TEMPLATE
+        .replace("__PERSONA_LIST__", persona_lines)
+        .replace("__PANELIST_SCHEMA__", schema_lines)
+    )
 
 
 @dataclass
@@ -152,29 +161,28 @@ class PanelResult:
     company_type: str = ""
     comp_reliability: str = ""
     comp_notes: str = ""
+    role_profile: str = DEFAULT_PROFILE_ID
 
     def to_dict(self):
         return asdict(self)
 
 
-# Fixed display order for panelist verdicts: Recruiter first (hard-screen
-# gate, the fastest read), then Hiring Manager, Engineering Lead, Design
-# Lead, Senior PM last. The prompt's schema example already lists them in
-# this order, but an LLM's own response ordering is a request, not a
-# guarantee (the same lesson this project has already learned the hard way
-# for em dashes, word limits, and banned phrases - see CLAUDE.md) - sorted
-# here in code so the UI order is always correct regardless of what order
-# the model actually returns them in.
-_PANELIST_ORDER = ["Recruiter", "Hiring Manager", "Engineering Lead", "Design Lead", "Senior PM"]
+def _sort_panelists(panelists: list, panelist_order: list) -> list:
+    """Fixed display order for panelist verdicts, driven by the active
+    role_profiles.RoleProfile (Recruiter first by convention - the
+    fastest hard-screen read). The prompt's schema example already lists
+    them in this order, but an LLM's own response ordering is a request,
+    not a guarantee (the same lesson this project has already learned the
+    hard way for em dashes, word limits, and banned phrases - see
+    CLAUDE.md) - sorted here in code so the UI order is always correct
+    regardless of what order the model actually returns them in."""
 
-
-def _sort_panelists(panelists: list) -> list:
     def sort_key(p):
         role = p.get("role", "")
         try:
-            return _PANELIST_ORDER.index(role)
+            return panelist_order.index(role)
         except ValueError:
-            return len(_PANELIST_ORDER)  # unrecognized role - keep, but last
+            return len(panelist_order)  # unrecognized role - keep, but last
 
     return sorted(panelists, key=sort_key)
 
@@ -192,8 +200,14 @@ def run_panel(
     salary: str = "",
     model: str = "claude-sonnet-4-5-20250929",
     deepseek_api_key: str = "",
+    role_profile: RoleProfile = None,
 ) -> PanelResult:
-    """Run the job listing + resume through the panel and return a PanelResult."""
+    """Run the job listing + resume through the panel and return a
+    PanelResult. `role_profile` selects which role_profiles.RoleProfile's
+    personas sit on the panel - defaults to Product Manager for callers
+    that don't pass one explicitly."""
+    role_profile = role_profile or get_profile(DEFAULT_PROFILE_ID)
+    system_prompt = _build_system_prompt(role_profile)
     tenure_note = compute_current_role_tenure(resume_text)
     tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
 
@@ -208,7 +222,7 @@ Role: {role_title}
 """
 
     text, _provider = call_with_fallback(
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
         user_prompt=user_prompt,
         anthropic_api_key=api_key,
         anthropic_model=model,
@@ -222,7 +236,7 @@ Role: {role_title}
         # Likely truncated mid-JSON. Retry once with a larger budget before giving up —
         # cheaper than failing the whole evaluation on an occasional long response.
         text, _provider = call_with_fallback(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             anthropic_api_key=api_key,
             anthropic_model=model,
@@ -242,7 +256,7 @@ Role: {role_title}
         fit_score=data["fit_score"],
         tier=data["tier"],
         tier_reason=data.get("tier_reason", ""),
-        panelists=_sort_panelists(data["panelists"]),
+        panelists=_sort_panelists(data["panelists"], role_profile.panelist_order),
         agreement=data.get("agreement", ""),
         sharpest_disagreement=data.get("sharpest_disagreement", ""),
         top_gaps=data.get("top_gaps", []),
@@ -255,4 +269,5 @@ Role: {role_title}
         company_type=data.get("company_type", ""),
         comp_reliability=data.get("comp_reliability", ""),
         comp_notes=data.get("comp_notes", ""),
+        role_profile=role_profile.id,
     )

@@ -20,7 +20,6 @@ import sources.bamboohr as job_source_bamboohr
 import sources.gem as job_source_gem
 import sources.greenhouse as job_source_greenhouse
 import sources.lever as job_source_lever
-import sources.remotive as job_source
 from data.company_registry import load_registry, mark_failed_all, record_discovery, save_registry, tokens_for_platform
 from utils.resolve import resolve_cross_platform
 from data.dedup import load_seen_urls, record_scans
@@ -36,6 +35,7 @@ from engines.tailor import generate_tailored_materials
 from data.tracker import load_all, log_result
 from browser.autofill import open_and_fill
 from data.fill_log import log_fill_attempt
+from role_profiles import get_profile, list_profiles
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 
@@ -96,6 +96,20 @@ with st.sidebar:
         st.text_area("Preview", value=resume_text, height=200, disabled=True)
 
     st.divider()
+    st.subheader("Role type")
+    _profiles = list_profiles()
+    active_profile = st.selectbox(
+        "What kind of role are you searching for?",
+        options=_profiles,
+        format_func=lambda p: p.display_name,
+        index=0,
+        help="Changes search title filters, the quick-scan rubric, the deep-dive panel's "
+        "personas, and the resume/cover-letter tailoring archetypes - everything downstream "
+        "is framed for this role type. Applies to your next search.",
+        key="role_profile_select",
+    )
+
+    st.divider()
     st.subheader("Links (optional)")
     st.caption("Included as hyperlinks in the header of both the tailored resume and cover letter, when provided.")
     linkedin_url = st.text_input("LinkedIn URL", value=os.environ.get("LINKEDIN_URL", ""))
@@ -143,8 +157,8 @@ with tab_search:
             value=15,
             help="Applies per company (Greenhouse/Ashby) or per source (Remotive), not as a shared total — "
             "selecting more companies means more total results, not fewer per company. Most companies have "
-            "far fewer than 15 open PM-shaped roles at once, so raising this rarely changes results for "
-            "Greenhouse/Ashby; it matters more for Remotive's broader search.",
+            "far fewer than 15 open roles matching the active role type at once, so raising this rarely "
+            "changes results for Greenhouse/Ashby; it matters more for Remotive's broader search.",
         )
 
     with st.expander("Search filters"):
@@ -269,22 +283,25 @@ with tab_search:
                 st.success("Saved. Re-open this panel's dropdowns above to see new companies.")
                 st.rerun()
 
+        _category_options = ["product", "project-management", "all-others", None]
         category = st.selectbox(
             "Remotive category",
-            options=["product", "project-management", "all-others", None],
+            options=_category_options,
             format_func=lambda c: "All categories" if c is None else c,
-            index=0,
-            help="Remotive's own category tag. 'product' filters out most engineering-only boards up front.",
+            index=_category_options.index(active_profile.remotive_category)
+            if active_profile.remotive_category in _category_options
+            else _category_options.index(None),
+            help="Remotive's own category tag - a soft preference, not a hard filter. Defaults based on the selected role type above.",
         )
         exclude_engineering = st.checkbox(
-            "Exclude hands-on engineering titles (Software Engineer, Architect, DevOps, etc.)",
+            f"Exclude titles that don't match {active_profile.display_name} (unrelated roles sharing a keyword)",
             value=True,
-            help="Drops listings whose title signals a hands-on IC engineering role, even if 'product' or 'AI' also appears in the title.",
+            help="Drops listings whose title matches one of the active role type's exclude keywords, even if the search query term also appears in the title.",
         )
-        require_pm_title = st.checkbox(
-            "Require a PM-shaped title (Product Manager, Product Owner, Head of Product, etc.)",
+        require_role_title = st.checkbox(
+            f"Require a {active_profile.display_name}-shaped title",
             value=True,
-            help="Remotive matches your search against the full job description, not just the title, so a generic query can return unrelated roles that just happen to mention 'product' somewhere. This requires the title itself to look like a PM role.",
+            help="Remotive matches your search against the full job description, not just the title, so a generic query can return unrelated roles that just happen to mention a search word somewhere. This requires the title itself to match the active role type.",
         )
 
     if st.button("Search & score", type="primary"):
@@ -312,8 +329,8 @@ with tab_search:
                             query,
                             limit=int(limit),
                             category=category,
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else [],
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else [],
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(rt_jobs)
                     except Exception as e:
@@ -326,8 +343,8 @@ with tab_search:
                             query,
                             boards=greenhouse_boards,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(gh_jobs)
                         if gh_meta.get("boards_failed"):
@@ -345,8 +362,8 @@ with tab_search:
                             query,
                             boards=ashby_boards,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(ab_jobs)
                         if ab_meta.get("boards_failed"):
@@ -364,8 +381,8 @@ with tab_search:
                             query,
                             boards=gem_boards,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(gem_jobs)
                         if gem_meta.get("boards_failed"):
@@ -383,8 +400,8 @@ with tab_search:
                             query,
                             boards=lever_boards,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(lever_jobs)
                         if lever_meta.get("boards_failed"):
@@ -402,8 +419,8 @@ with tab_search:
                             query,
                             boards=bamboohr_boards,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(bamboohr_jobs)
                         if bamboohr_meta.get("boards_failed"):
@@ -463,8 +480,8 @@ with tab_search:
                             failed_by_platform,
                             query,
                             limit=int(limit),
-                            exclude_titles=job_source.DEFAULT_TITLE_EXCLUDE if exclude_engineering else None,
-                            require_title_keywords=job_source.DEFAULT_TITLE_INCLUDE if require_pm_title else None,
+                            exclude_titles=active_profile.title_exclude if exclude_engineering else None,
+                            require_title_keywords=active_profile.title_include if require_role_title else None,
                         )
                         jobs.extend(extra_jobs)
 
@@ -499,9 +516,18 @@ with tab_search:
             else:
                 st.session_state.jobs_by_id = {str(j.get("id", j["url"])): j for j in jobs}
 
+                # Cache reuse is scoped to the active role profile - a URL
+                # scored under a different role type (e.g. Product Manager)
+                # is treated as unseen here and re-scored, not silently
+                # shown with a stale, wrong-lens score (see data/dedup.py).
                 seen = load_seen_urls()
-                new_jobs = [j for j in jobs if j.get("url") not in seen]
-                cached_jobs = [j for j in jobs if j.get("url") in seen]
+
+                def _cached_for_active_profile(job):
+                    row = seen.get(job.get("url"))
+                    return row is not None and row.get("role_profile") == active_profile.id
+
+                new_jobs = [j for j in jobs if not _cached_for_active_profile(j)]
+                cached_jobs = [j for j in jobs if _cached_for_active_profile(j)]
 
                 results = [
                     quick_score_from_cache(seen[j["url"]], str(j.get("id", j["url"])))
@@ -511,7 +537,7 @@ with tab_search:
                 if new_jobs:
                     with st.spinner(f"Scoring {len(new_jobs)} new listings against your resume..."):
                         try:
-                            new_results = batch_score(resume_text, new_jobs, api_key, deepseek_api_key=deepseek_api_key)
+                            new_results = batch_score(resume_text, new_jobs, api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key)
                             results.extend(new_results)
                             # Only cache genuine successes — a failed attempt (grade "?")
                             # shouldn't get treated as "already scored" and silently block
@@ -537,8 +563,7 @@ with tab_search:
     if st.session_state.search_results:
         st.markdown(f"### {len(st.session_state.search_results)} listings ranked")
         st.caption(
-            "These are a fast first-pass triage, not a verdict — titles can be misleading "
-            "(a 'Product Manager' title sometimes describes a hands-on engineering role). "
+            "These are a fast first-pass triage, not a verdict — titles can be misleading. "
             "Always run Deep Dive before trusting a high score."
         )
         for r in st.session_state.search_results:
@@ -690,6 +715,7 @@ with tab_deep_dive:
                         location=target_job.get("location", ""),
                         salary=salary,
                         deepseek_api_key=deepseek_api_key,
+                        role_profile=active_profile,
                     )
                     log_result(result)
                     # Persisted so the tailoring button below survives the rerun
@@ -825,6 +851,13 @@ with tab_deep_dive:
                         resume_fixes=result.resume_fixes,
                         api_key=api_key,
                         deepseek_api_key=deepseek_api_key,
+                        # Matches the role profile the Deep Dive itself ran
+                        # under (result.role_profile), not necessarily
+                        # today's sidebar selection - the tailoring is
+                        # grounded in that specific evaluation's gaps/fixes,
+                        # so it should stay consistent with it even if the
+                        # sidebar's role type has since been changed.
+                        role_profile=get_profile(result.role_profile),
                     )
                     st.session_state.tailored_materials = materials
                 except Exception as e:

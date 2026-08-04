@@ -7812,7 +7812,7 @@ Parsleyhealth,parsleyhealth,unknown,unverified,,"Bulk-imported — appeared on 2
 Avidxchangeinc,avidxchangeinc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Securityscorecard,securityscorecard,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Monthly,monthly,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Mavenclinic,mavenclinic,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Mavenclinic,mavenclinic,greenhouse,verified,2026-08-03T21:17:52,Auto-discovered
 Yoursuper,yoursuper,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Formhealth,formhealth,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Oliverplus,oliverplus,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -26076,3 +26076,4 @@ Agnewbeck,agnewbeck,bamboohr,unverified,,Bulk-imported from a real bamboohr comp
 Cgbil,cgbil,bamboohr,unverified,,Bulk-imported from a real bamboohr company directory — pending verification by an actual Maester search
 American Terawatt,american terawatt,ashby,verified,2026-07-31T22:21:39,Auto-discovered
 Cherry,withcherry,ashby,failed,2026-07-31T22:53:20,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
+Effective-Ai,effective-ai,ashby,verified,2026-08-03T21:17:52,Auto-discovered
