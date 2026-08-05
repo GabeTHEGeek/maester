@@ -1,14 +1,14 @@
 company,token,platform,status,last_checked,notes
-Anthropic,anthropic,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
+Anthropic,anthropic,greenhouse,verified,2026-08-04T14:18:26,Auto-discovered
 Airtable,airtable,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
-Mercury,mercury,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
+Mercury,mercury,greenhouse,verified,2026-08-04T14:46:14,Auto-discovered
 OpenAI,openai,ashby,verified,2026-07-31T21:56:24,Auto-discovered
-Databricks,databricks,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
+Databricks,databricks,greenhouse,verified,2026-08-04T14:46:14,Auto-discovered
 Notion,notion,ashby,verified,2026-07-31T21:56:24,Auto-discovered
 Ramp,ramp,ashby,verified,2026-07-31T21:56:24,Auto-discovered
-Scale AI,scaleai,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
-Webflow,webflow,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
-Vercel,vercel,greenhouse,verified,2026-07-31T21:56:24,Auto-discovered
+Scale AI,scaleai,greenhouse,verified,2026-08-04T14:47:40,Auto-discovered
+Webflow,webflow,greenhouse,verified,2026-08-04T14:47:40,Auto-discovered
+Vercel,vercel,greenhouse,verified,2026-08-04T14:47:40,Auto-discovered
 Linear,linear,ashby,verified,2026-07-31T21:56:24,Auto-discovered
 Retool,retool,gem,verified,2026-07-31T21:56:24,Auto-discovered
 Replit,replit,ashby,verified,2026-07-31T21:56:24,Auto-discovered
@@ -4562,7 +4562,7 @@ Emporiarevolutionizinghomeenergy,emporiarevolutionizinghomeenergy,greenhouse,unv
 Transactlyconnect,transactlyconnect,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Athleticsbaseballops,athleticsbaseballops,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Careervillage,careervillage,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Stackadapt,stackadapt,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (greenhouse, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
+Stackadapt,stackadapt,greenhouse,verified,2026-08-05T16:44:00,Auto-discovered
 Tigergraph,tigergraph,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Developmentseed,developmentseed,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Ixllearning,ixllearning,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -26077,3 +26077,4 @@ Cgbil,cgbil,bamboohr,unverified,,Bulk-imported from a real bamboohr company dire
 American Terawatt,american terawatt,ashby,verified,2026-07-31T22:21:39,Auto-discovered
 Cherry,withcherry,ashby,failed,2026-07-31T22:53:20,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Effective-Ai,effective-ai,ashby,verified,2026-08-03T21:17:52,Auto-discovered
+Sequencing,sequencing,gem,verified,2026-08-05T16:54:19,Auto-discovered
