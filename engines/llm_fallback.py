@@ -20,11 +20,21 @@ DeepSeek exposes an Anthropic-format-compatible endpoint
 pointed at a different base_url with a different key and model — no
 separate SDK, unlike the Gemini integration this replaces.
 
-Only billing/quota errors on the ANTHROPIC side trigger the fallback. Any
-other kind of failure (a malformed request, a truncated response, a network
-blip) is re-raised untouched, so each engine's own existing retry logic
-still runs exactly as it did before — this only adds a new path, it doesn't
-change the old ones.
+Billing/quota errors AND timeout/connection errors on the ANTHROPIC side
+trigger the fallback. Any other kind of failure (a malformed request, a
+truncated response) is re-raised untouched, so each engine's own existing
+retry logic still runs exactly as it did before — this only adds a new
+path, it doesn't change the old ones.
+
+Explicit request timeout, shorter than the anthropic SDK's own default:
+real evidence from actual use was a Deep Dive that just sat on "Fetching
+listing and convening the panel..." with zero feedback — traced to the
+SDK's default read timeout being 600 SECONDS (10 minutes), stacked with
+its own default of 2 automatic retries on top of that. A slow or hung
+request looked identical to a genuinely frozen app for up to half an hour
+before anything even raised an exception for this module's own fallback
+logic to catch. Cut to a real timeout so a stuck request fails fast enough
+to actually fall over to DeepSeek instead of just sitting there.
 """
 
 import json
@@ -38,6 +48,18 @@ _BILLING_ERROR_MARKERS = [
     "insufficient_quota",
     "billing",
 ]
+
+# The anthropic SDK's own defaults (600s read timeout, 2 automatic retries)
+# mean a single hung request can sit for up to ~30 minutes before this
+# module's own fallback logic ever sees an exception to react to - confirmed
+# directly this reads as a fully frozen app, not a slow one. 45s is generous
+# for a real response (the deep-dive panel call, the largest of the three,
+# typically finishes in single-digit seconds) while still failing fast
+# enough that a genuinely stuck request falls over to DeepSeek in well under
+# a minute rather than half an hour. max_retries=1 (not the SDK's default 2)
+# keeps the worst case bounded to roughly 2x this timeout per provider, not 3x.
+_REQUEST_TIMEOUT_SECONDS = 45.0
+_MAX_SDK_RETRIES = 1
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
 # deepseek-chat/deepseek-reasoner (the older, commonly-referenced names) were
@@ -55,6 +77,19 @@ _RETRY_DELAY_RE = re.compile(r"retry.{0,10}?(\d+(?:\.\d+)?)\s*s", re.IGNORECASE)
 
 def _is_billing_error(exc: Exception) -> bool:
     return any(marker in str(exc).lower() for marker in _BILLING_ERROR_MARKERS)
+
+
+def _is_timeout_or_connection_error(exc: Exception) -> bool:
+    """A hung/slow/unreachable Anthropic endpoint is exactly the kind of
+    failure DeepSeek fallback exists for, same as a billing error - the
+    user doesn't care WHY the primary provider didn't answer, only that
+    something did. Checks the SDK's own exception types first (reliable),
+    falls back to a substring check on the message (covers wrapped/chained
+    exceptions the SDK types don't catch)."""
+    if isinstance(exc, (anthropic.APITimeoutError, anthropic.APIConnectionError)):
+        return True
+    message = str(exc).lower()
+    return "timeout" in message or "timed out" in message
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
@@ -121,7 +156,9 @@ def call_with_fallback(
     listing twice — real evidence from actual use showed the same URL
     scoring 72/64/72 across three deep-dive runs, and 85 vs 88 (crossing an
     actual recommendation-tier boundary) on another."""
-    client = anthropic.Anthropic(api_key=anthropic_api_key)
+    client = anthropic.Anthropic(
+        api_key=anthropic_api_key, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES
+    )
     try:
         response = client.messages.create(
             model=anthropic_model,
@@ -132,10 +169,15 @@ def call_with_fallback(
         )
         return _extract_text(response), "anthropic"
     except Exception as e:
-        if not _is_billing_error(e) or not deepseek_api_key:
+        if not (_is_billing_error(e) or _is_timeout_or_connection_error(e)) or not deepseek_api_key:
             raise
 
-    deepseek_client = anthropic.Anthropic(api_key=deepseek_api_key, base_url=DEEPSEEK_BASE_URL)
+    deepseek_client = anthropic.Anthropic(
+        api_key=deepseek_api_key,
+        base_url=DEEPSEEK_BASE_URL,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+        max_retries=_MAX_SDK_RETRIES,
+    )
     last_error = None
     for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
         try:
