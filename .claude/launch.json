@@ -4,7 +4,7 @@
     {
       "name": "streamlit",
       "runtimeExecutable": "venv/bin/python3",
-      "runtimeArgs": ["-m", "streamlit", "run", "app.py"],
+      "runtimeArgs": ["-m", "streamlit", "run", "app.py", "--server.headless", "true"],
       "port": 8501
     }
   ]

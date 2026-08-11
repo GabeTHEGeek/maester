@@ -6,13 +6,17 @@ for the shape, product_manager.py/customer_success.py for real examples),
 then add it to _PROFILES below. Nothing else needs to change.
 """
 
+from role_profiles.account_executive import PROFILE as _ACCOUNT_EXECUTIVE
 from role_profiles.base import PanelPersona, RoleProfile
+from role_profiles.chief_of_staff import PROFILE as _CHIEF_OF_STAFF
 from role_profiles.customer_success import PROFILE as _CUSTOMER_SUCCESS
 from role_profiles.product_manager import PROFILE as _PRODUCT_MANAGER
 
 _PROFILES = {
     _PRODUCT_MANAGER.id: _PRODUCT_MANAGER,
     _CUSTOMER_SUCCESS.id: _CUSTOMER_SUCCESS,
+    _ACCOUNT_EXECUTIVE.id: _ACCOUNT_EXECUTIVE,
+    _CHIEF_OF_STAFF.id: _CHIEF_OF_STAFF,
 }
 
 DEFAULT_PROFILE_ID = _PRODUCT_MANAGER.id
