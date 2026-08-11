@@ -5,7 +5,7 @@ Mercury,mercury,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 OpenAI,openai,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Databricks,databricks,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 Notion,notion,ashby,verified,2026-08-07T00:15:38,Auto-discovered
-Ramp,ramp,ashby,verified,2026-08-07T00:15:38,Auto-discovered
+Ramp,ramp,ashby,verified,2026-08-11T04:11:32,Auto-discovered
 Scale AI,scaleai,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 Webflow,webflow,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 Vercel,vercel,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
@@ -4180,7 +4180,7 @@ Pokemoncareers,pokemoncareers,greenhouse,unverified,,Bulk-imported from a real g
 Afterverse,afterverse,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Duckworksmillworksolutions,duckworksmillworksolutions,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Madisonlogicinc,madisonlogicinc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Route,route,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Route,route,greenhouse,verified,2026-08-11T05:20:20,Auto-discovered
 Slice,slice,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Csw,csw,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Thriva,thriva,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -7965,7 +7965,7 @@ Hubspotstudents,hubspotstudents,greenhouse,unverified,,Bulk-imported from a real
 Apercenpartnersllc,apercenpartnersllc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Camundaservices,camundaservices,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Catawiki,catawiki,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Typeform,typeform,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Typeform,typeform,greenhouse,verified,2026-08-11T06:17:10,Auto-discovered
 Redcellpartners,redcellpartners,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Plume,plume,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (greenhouse, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Cheddar,cheddar,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -10113,7 +10113,7 @@ Forwardfinancing,forwardfinancing,greenhouse,unverified,,Bulk-imported from a re
 Altoira,altoira,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Consensys,consensys,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Seurat,seurat,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Actblue,actblue,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Actblue,actblue,greenhouse,verified,2026-08-11T06:35:03,Auto-discovered
 Ciscomeraki,ciscomeraki,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Firstlookmedia,firstlookmedia,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Godfreydadichpartners,godfreydadichpartners,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -26077,6 +26077,6 @@ Cgbil,cgbil,bamboohr,unverified,,Bulk-imported from a real bamboohr company dire
 American Terawatt,american terawatt,ashby,verified,2026-07-31T22:21:39,Auto-discovered
 Cherry,withcherry,ashby,failed,2026-07-31T22:53:20,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Effective-Ai,effective-ai,ashby,verified,2026-08-03T21:17:52,Auto-discovered
-Sequencing,sequencing,gem,verified,2026-08-11T04:07:36,Auto-discovered
+Sequencing,sequencing,gem,verified,2026-08-07T00:15:38,Auto-discovered
 Angi,angi,ashby,verified,2026-08-06T22:38:49,Auto-discovered
 Kiddom,kiddom,ashby,verified,2026-08-10T22:26:28,Auto-discovered

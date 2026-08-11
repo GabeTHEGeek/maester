@@ -608,9 +608,10 @@ with tab_search:
         "Paste a job URL directly",
         key="score_url_input",
         placeholder="https://job-boards.greenhouse.io/company/jobs/12345",
-        help="Recognizes Greenhouse, Ashby, Lever, Gem, and BambooHR URLs and pulls the real listing "
-        "data the same way a search would, and registers the company in the registry below for future "
-        "searches. Other career pages get a best-effort page scrape instead.",
+        help="Recognizes Greenhouse, Ashby, Lever, Gem, and BambooHR URLs (including a Greenhouse board "
+        "embedded on a company's own custom careers domain, e.g. a \"?gh_jid=\" URL) and pulls the real "
+        "listing data the same way a search would, registering the company in the registry below for "
+        "future searches. Other career pages get a best-effort page scrape instead.",
     )
     if st.button("Score this URL"):
         if not api_key:
@@ -624,6 +625,19 @@ with tab_search:
                 try:
                     token, source = parse_company_and_source_from_url(paste_url)
                     job = _fetch_listing_by_url(paste_url, token, source)
+                    if job is None and not token:
+                        # Not a recognized job-boards.greenhouse.io/ashby/
+                        # lever/gem/bamboohr URL, but many companies embed a
+                        # Greenhouse board on their OWN custom careers domain
+                        # instead (a "?gh_jid=<id>" URL) - confirmed directly
+                        # this style of page is ALSO itself client-rendered,
+                        # so a generic scrape gets nav chrome, not the job.
+                        # Resolve straight to Greenhouse's API using the
+                        # board token discovered from the embed widget's own
+                        # script tag, still present in the static HTML.
+                        job = job_source_greenhouse.resolve_embedded_job(paste_url)
+                        if job:
+                            token, source = job["board"], "greenhouse"
                     if job is None:
                         # Unrecognized platform (custom career page), or a
                         # recognized one where this exact posting wasn't in
@@ -776,15 +790,30 @@ with tab_deep_dive:
                 st.rerun()
         target_job = job
     elif manual_url:
+        # Try the same accurate, per-platform fetch Search & Score's "score
+        # a listing by URL" uses, including Greenhouse-embed resolution
+        # (see sources/greenhouse.py) - a manually-pasted URL used to always
+        # fall straight to a generic page scrape below (target_job's
+        # "description" was never populated here), which is exactly what
+        # produced an unreadable result for a client-rendered page like a
+        # Greenhouse embed on a company's own domain.
         parsed_company, parsed_source = parse_company_and_source_from_url(manual_url)
-        target_job = {
-            "title": "",
-            "company": parsed_company,
-            "url": manual_url,
-            "description": "",
-            "source": parsed_source or "unknown",
-            "board": parsed_company or "unknown",
-        }
+        resolved = _fetch_listing_by_url(manual_url, parsed_company, parsed_source)
+        if resolved is None and not parsed_company:
+            resolved = job_source_greenhouse.resolve_embedded_job(manual_url)
+            if resolved:
+                parsed_company, parsed_source = resolved["board"], "greenhouse"
+        if resolved:
+            target_job = resolved
+        else:
+            target_job = {
+                "title": "",
+                "company": parsed_company,
+                "url": manual_url,
+                "description": "",
+                "source": parsed_source or "unknown",
+                "board": parsed_company or "unknown",
+            }
 
     if st.button("Run full panel", type="primary"):
         if not api_key:
