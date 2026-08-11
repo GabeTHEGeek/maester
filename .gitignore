@@ -7,6 +7,8 @@ scan_history.csv
 scan_history_old.csv
 fill_log.csv
 fill_log_old.csv
+applications.csv
+applications_old.csv
 PROJECT_SUMMARY.md
 .streamlit/secrets.toml
 venv/

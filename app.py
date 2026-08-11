@@ -9,8 +9,11 @@ Run: streamlit run app.py
 import os
 import re
 import tempfile
+from collections import Counter
+from datetime import datetime
 
 from dotenv import load_dotenv
+import plotly.graph_objects as go
 import streamlit as st
 
 load_dotenv()
@@ -36,6 +39,7 @@ from data.tracker import load_all, log_result
 from browser.autofill import open_and_fill
 from data.fill_log import log_fill_attempt
 from role_profiles import get_profile, list_profiles
+from data.pipeline import DEFAULT_STATUS, STATUSES, add_or_update as track_add_or_update, is_tracked, load_all as load_pipeline, save_all as save_pipeline
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 
@@ -177,8 +181,8 @@ with st.sidebar:
             smtp_port = st.number_input("Port", value=587, key="smtp_port")
         auto_email = st.checkbox("Automatically email me a summary after each Deep Dive run", value=False)
 
-tab_search, tab_deep_dive, tab_dashboard = st.tabs(
-    ["Search & Score", "Deep Dive", "Dashboard"]
+tab_search, tab_deep_dive, tab_dashboard, tab_tracking = st.tabs(
+    ["Search & Score", "Deep Dive", "Dashboard", "Tracking"]
 )
 
 # ---------------------------------------------------------------------------
@@ -716,7 +720,7 @@ with tab_search:
                 "F": "red",
             }.get(r.grade, "gray")
             with st.container(border=True):
-                c1, c2, c3, c4 = st.columns([3, 1, 1, 1])
+                c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
                 with c1:
                     if r.source == "greenhouse":
                         source_label = f"Greenhouse · {r.board}"
@@ -756,6 +760,21 @@ with tab_search:
                 with c4:
                     if st.button("Deep dive", key=f"dive_{r.job_id}", width='stretch'):
                         st.session_state.deep_dive_job = st.session_state.jobs_by_id.get(r.job_id)
+                        st.rerun()
+                with c5:
+                    already_tracked = is_tracked(r.url)
+                    if st.button(
+                        "✓ Tracked" if already_tracked else "+ Track",
+                        key=f"track_{r.job_id}",
+                        width='stretch',
+                        disabled=already_tracked,
+                    ):
+                        track_add_or_update(
+                            url=r.url,
+                            company=r.company,
+                            role_title=r.title,
+                            snapshot_score=f"{r.grade} ({r.score:.1f}/5.0)",
+                        )
                         st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -923,7 +942,7 @@ with tab_deep_dive:
             meta_bits.append(f"💰 {result.salary}")
         if meta_bits:
             st.caption(" · ".join(meta_bits))
-        col_open, col_email = st.columns([1, 1])
+        col_open, col_email, col_track = st.columns([1, 1, 1])
         with col_open:
             if result.job_url:
                 st.link_button("Open listing ↗", result.job_url)
@@ -945,6 +964,17 @@ with tab_deep_dive:
                         st.success("Sent.")
                     except Exception as e:
                         st.error(f"Email failed to send: {e}")
+        with col_track:
+            if result.job_url:
+                already_tracked = is_tracked(result.job_url)
+                if st.button("✓ Tracked" if already_tracked else "+ Track this application", disabled=already_tracked):
+                    track_add_or_update(
+                        url=result.job_url,
+                        company=result.company,
+                        role_title=result.role_title,
+                        snapshot_score=f"{result.tier} ({result.fit_score}/100)",
+                    )
+                    st.rerun()
 
         st.markdown("### Panel verdicts")
         for p in result.panelists:
@@ -1168,3 +1198,137 @@ with tab_dashboard:
                 "url": st.column_config.LinkColumn("Listing", display_text="Open ↗")
             },
         )
+
+# ---------------------------------------------------------------------------
+# TAB 4: Tracking — the manually-maintained application pipeline. Separate
+# from Dashboard on purpose: Dashboard logs every Deep Dive automatically;
+# this only holds jobs you explicitly chose to track (see data/pipeline.py).
+# ---------------------------------------------------------------------------
+with tab_tracking:
+    st.subheader("Application tracking")
+
+    pipeline_rows = load_pipeline()
+    scored_count = len(load_seen_urls())
+    deep_dive_count = len(load_all())
+    tracked_count = len(pipeline_rows)
+    status_counts = Counter(r.get("status") or DEFAULT_STATUS for r in pipeline_rows)
+
+    st.markdown("#### Overview")
+    metric_cols = st.columns(6)
+    metric_cols[0].metric("Scored", scored_count)
+    metric_cols[1].metric("Deep dives", deep_dive_count)
+    metric_cols[2].metric("Tracked", tracked_count)
+    metric_cols[3].metric("Applied", status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0))
+    metric_cols[4].metric("Interviewing", status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0))
+    metric_cols[5].metric("Offers", status_counts.get("Offer", 0))
+
+    if not pipeline_rows:
+        st.info(
+            "Nothing tracked yet — click \"+ Track\" on a Search & Score result or \"+ Track this "
+            "application\" on a Deep Dive to start."
+        )
+    else:
+        st.markdown("#### Pipeline funnel")
+        st.caption(
+            "Scored/Deep dived/Tracked are independent activity counts, not strictly nested (a "
+            "listing can be tracked straight from a search result without a deep dive, or deep-dived "
+            "via a pasted URL without a prior search). Applied/Interviewing/Offer assume the normal "
+            "happy-path progression through those statuses — e.g. \"Interviewing\" includes jobs "
+            "currently at \"Offer\" too, since reaching Offer implies having interviewed. Rejected/"
+            "Withdrawn are excluded here as exits, not further progress — see the status breakdown "
+            "below for those."
+        )
+        funnel_stages = ["Scored", "Deep dived", "Tracked", "Applied", "Interviewing", "Offer"]
+        funnel_values = [
+            scored_count,
+            deep_dive_count,
+            tracked_count,
+            status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0),
+            status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0),
+            status_counts.get("Offer", 0),
+        ]
+        funnel_fig = go.Figure(
+            go.Funnel(
+                y=funnel_stages,
+                x=funnel_values,
+                textinfo="value+percent initial",
+            )
+        )
+        funnel_fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=350)
+        st.plotly_chart(funnel_fig, width='stretch')
+
+        col_status, col_time = st.columns(2)
+        with col_status:
+            st.markdown("#### Status breakdown")
+            status_fig = go.Figure(
+                go.Bar(
+                    x=[status_counts.get(s, 0) for s in STATUSES],
+                    y=STATUSES,
+                    orientation="h",
+                )
+            )
+            status_fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=300, xaxis_title="Jobs")
+            st.plotly_chart(status_fig, width='stretch')
+        with col_time:
+            st.markdown("#### Tracking activity over time")
+            # date_added is an ISO timestamp (datetime.isoformat()) - the
+            # date portion sorts and groups correctly as a plain string,
+            # no parsing needed.
+            dates = sorted(
+                (r.get("date_added") or "")[:10] for r in pipeline_rows if r.get("date_added")
+            )
+            day_counts = Counter(dates)
+            time_fig = go.Figure(
+                go.Bar(x=list(day_counts.keys()), y=list(day_counts.values()))
+            )
+            # Plain "YYYY-MM-DD" strings get auto-detected as a continuous
+            # date axis by default - confirmed directly this produces
+            # nonsensical sub-second tick labels when there's only one (or
+            # few) distinct date(s), since Plotly pads a continuous axis
+            # around a single point. Forcing "category" treats each date as
+            # its own discrete bar instead, which is also just more
+            # readable at this tool's actual scale (tens of jobs, not
+            # thousands) than a true continuous time axis would be.
+            time_fig.update_xaxes(type="category")
+            time_fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=300, yaxis_title="Jobs tracked")
+            st.plotly_chart(time_fig, width='stretch')
+
+        st.markdown("#### Tracked applications")
+        st.caption("Edit status/notes directly, then save. Removing a row here removes it from tracking.")
+        edited_pipeline = st.data_editor(
+            pipeline_rows,
+            num_rows="dynamic",
+            width='stretch',
+            column_config={
+                "url": st.column_config.LinkColumn("Listing", display_text="Open ↗"),
+                "status": st.column_config.SelectboxColumn(options=STATUSES),
+                "snapshot_score": st.column_config.TextColumn("Score (at time tracked)", disabled=True),
+                "date_added": st.column_config.TextColumn(disabled=True),
+            },
+            key="pipeline_editor",
+        )
+        if st.button("Save tracking changes"):
+            now = datetime.now().isoformat(timespec="seconds")
+            existing_status_by_url = {r.get("url"): r.get("status") for r in pipeline_rows}
+            sanitized_rows = []
+            for r in edited_pipeline:
+                url = (r.get("url") or "").strip()
+                if not url:
+                    continue  # a fully blank row added but never filled in — skip it
+                status = r.get("status") or DEFAULT_STATUS
+                status_updated_at = r.get("status_updated_at") or now
+                if existing_status_by_url.get(url) is not None and existing_status_by_url.get(url) != status:
+                    status_updated_at = now
+                sanitized_rows.append({
+                    "url": url,
+                    "company": r.get("company") or "",
+                    "role_title": r.get("role_title") or "",
+                    "snapshot_score": r.get("snapshot_score") or "",
+                    "status": status,
+                    "date_added": r.get("date_added") or now,
+                    "status_updated_at": status_updated_at,
+                    "notes": r.get("notes") or "",
+                })
+            save_pipeline(sanitized_rows)
+            st.success("Saved.")
+            st.rerun()
