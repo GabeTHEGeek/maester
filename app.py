@@ -1213,14 +1213,32 @@ with tab_tracking:
     tracked_count = len(pipeline_rows)
     status_counts = Counter(r.get("status") or DEFAULT_STATUS for r in pipeline_rows)
 
+    applied_active = status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0)
+    interviewing_total = status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0)
+    offer_total = status_counts.get("Offer", 0)
+    # Denominator for response rate is broader than the funnel's "Applied"
+    # tile on purpose: everyone who ever reached Applied or further —
+    # including Rejected/Withdrawn, since they applied too, they just also
+    # exited. The funnel's "Applied" excludes those as exits, not progress;
+    # this metric is asking a different question ("of everyone I applied
+    # to, how many responded"), so it needs the full denominator.
+    applied_ever = applied_active + status_counts.get("Rejected", 0) + status_counts.get("Withdrawn", 0)
+    # A response is any employer-initiated status change after applying —
+    # Rejected counts (they responded, just not favorably); Withdrawn
+    # doesn't by itself, since that's user-initiated and may happen before
+    # or after a response either way.
+    responded_total = interviewing_total + status_counts.get("Rejected", 0)
+    response_rate = (responded_total / applied_ever * 100) if applied_ever else 0.0
+
     st.markdown("#### Overview")
-    metric_cols = st.columns(6)
+    metric_cols = st.columns(7)
     metric_cols[0].metric("Scored", scored_count)
     metric_cols[1].metric("Deep dives", deep_dive_count)
     metric_cols[2].metric("Tracked", tracked_count)
-    metric_cols[3].metric("Applied", status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0))
-    metric_cols[4].metric("Interviewing", status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0))
-    metric_cols[5].metric("Offers", status_counts.get("Offer", 0))
+    metric_cols[3].metric("Applied", applied_active)
+    metric_cols[4].metric("Interviewing", interviewing_total)
+    metric_cols[5].metric("Offers", offer_total)
+    metric_cols[6].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
 
     if not pipeline_rows:
         st.info(
@@ -1243,9 +1261,9 @@ with tab_tracking:
             scored_count,
             deep_dive_count,
             tracked_count,
-            status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0),
-            status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0),
-            status_counts.get("Offer", 0),
+            applied_active,
+            interviewing_total,
+            offer_total,
         ]
         funnel_fig = go.Figure(
             go.Funnel(
@@ -1293,6 +1311,37 @@ with tab_tracking:
             time_fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=300, yaxis_title="Jobs tracked")
             st.plotly_chart(time_fig, width='stretch')
 
+        st.markdown("#### Applied by day")
+        st.caption(
+            "Counts by date_applied — set once, the first time a job's status is saved as \"Applied\" "
+            "or further (not date_added, which is when it was first tracked, often before applying). "
+            "Rows tracked before this field existed won't have one and are excluded here."
+        )
+        applied_dates = sorted(
+            (r.get("date_applied") or "")[:10] for r in pipeline_rows if r.get("date_applied")
+        )
+        if not applied_dates:
+            st.caption("No applications logged yet.")
+        else:
+            applied_day_counts = Counter(applied_dates)
+            applied_time_fig = go.Figure(
+                go.Bar(x=list(applied_day_counts.keys()), y=list(applied_day_counts.values()))
+            )
+            applied_time_fig.update_xaxes(type="category")
+            applied_time_fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=300, yaxis_title="Applications sent")
+            st.plotly_chart(applied_time_fig, width='stretch')
+            avg_per_active_day = len(applied_dates) / len(applied_day_counts)
+            st.caption(f"{len(applied_dates)} applications across {len(applied_day_counts)} active day(s) — {avg_per_active_day:.1f}/day average on days you applied.")
+
+        st.markdown("#### Conversion rates")
+        st.caption("Percentages of everyone who ever reached \"Applied\" or further, including Rejected/Withdrawn.")
+        rate_cols = st.columns(4)
+        rate_cols[0].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
+        rate_cols[1].metric("Interview rate", f"{interviewing_total / applied_ever * 100:.0f}%" if applied_ever else "—")
+        rate_cols[2].metric("Offer rate", f"{offer_total / applied_ever * 100:.0f}%" if applied_ever else "—")
+        rejected_rate = (status_counts.get("Rejected", 0) / applied_ever * 100) if applied_ever else 0.0
+        rate_cols[3].metric("Rejection rate", f"{rejected_rate:.0f}%" if applied_ever else "—")
+
         st.markdown("#### Tracked applications")
         st.caption("Edit status/notes directly, then save. Removing a row here removes it from tracking.")
         edited_pipeline = st.data_editor(
@@ -1304,21 +1353,31 @@ with tab_tracking:
                 "status": st.column_config.SelectboxColumn(options=STATUSES),
                 "snapshot_score": st.column_config.TextColumn("Score (at time tracked)", disabled=True),
                 "date_added": st.column_config.TextColumn(disabled=True),
+                "date_applied": st.column_config.TextColumn("Applied on", disabled=True),
             },
             key="pipeline_editor",
         )
         if st.button("Save tracking changes"):
             now = datetime.now().isoformat(timespec="seconds")
-            existing_status_by_url = {r.get("url"): r.get("status") for r in pipeline_rows}
+            existing_by_url = {r.get("url"): r for r in pipeline_rows}
             sanitized_rows = []
             for r in edited_pipeline:
                 url = (r.get("url") or "").strip()
                 if not url:
                     continue  # a fully blank row added but never filled in — skip it
                 status = r.get("status") or DEFAULT_STATUS
+                existing = existing_by_url.get(url)
+                existing_status = existing.get("status") if existing else None
                 status_updated_at = r.get("status_updated_at") or now
-                if existing_status_by_url.get(url) is not None and existing_status_by_url.get(url) != status:
+                if existing is not None and existing_status != status:
                     status_updated_at = now
+                # date_applied is set once, the first time status reaches
+                # Applied or further, and never overwritten after — that's
+                # what makes it usable for "applied by day" outreach
+                # tracking even after the job later moves to Interviewing.
+                date_applied = (existing.get("date_applied") if existing else "") or r.get("date_applied") or ""
+                if not date_applied and status in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
+                    date_applied = now
                 sanitized_rows.append({
                     "url": url,
                     "company": r.get("company") or "",
@@ -1327,6 +1386,7 @@ with tab_tracking:
                     "status": status,
                     "date_added": r.get("date_added") or now,
                     "status_updated_at": status_updated_at,
+                    "date_applied": date_applied,
                     "notes": r.get("notes") or "",
                 })
             save_pipeline(sanitized_rows)

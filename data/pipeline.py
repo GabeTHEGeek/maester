@@ -26,6 +26,7 @@ FIELDS = [
     "status",
     "date_added",
     "status_updated_at",
+    "date_applied",
     "notes",
 ]
 
@@ -46,15 +47,37 @@ def ensure_pipeline():
     # Same schema-drift safety net as tracker.py/dedup.py/fill_log.py: never
     # append new-schema rows to an old-schema file.
     with open(PIPELINE_PATH, newline="") as f:
-        reader = csv.reader(f)
-        existing_header = next(reader, [])
+        reader = csv.DictReader(f)
+        existing_header = reader.fieldnames or []
+        existing_rows = list(reader)
 
-    if existing_header != FIELDS:
-        archive_path = PIPELINE_PATH.replace(".csv", "_old.csv")
-        os.replace(PIPELINE_PATH, archive_path)
-        with open(PIPELINE_PATH, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDS)
-            writer.writeheader()
+    if existing_header == FIELDS:
+        return
+
+    # Purely additive drift (every old column still exists in the new
+    # schema, e.g. adding date_applied) gets backfilled in place instead of
+    # archived — real tracked applications live in this file and a blind
+    # archive would silently reset the user's whole pipeline back to empty.
+    # Checked as a set, not a prefix: a new field can land in the middle of
+    # FIELDS (as date_applied did, ahead of notes) without that counting as
+    # a breaking change — save_all always writes by field name, not position.
+    if set(existing_header) <= set(FIELDS):
+        for row in existing_rows:
+            for field in FIELDS:
+                row.setdefault(field, "")
+            # Best-effort backfill: status_updated_at is the closest proxy
+            # for "when this job reached its current status" on rows that
+            # predate date_applied.
+            if not row.get("date_applied") and row.get("status") in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
+                row["date_applied"] = row.get("status_updated_at") or ""
+        save_all(existing_rows)
+        return
+
+    archive_path = PIPELINE_PATH.replace(".csv", "_old.csv")
+    os.replace(PIPELINE_PATH, archive_path)
+    with open(PIPELINE_PATH, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS)
+        writer.writeheader()
 
 
 def load_all() -> list:
@@ -99,6 +122,7 @@ def add_or_update(url: str, company: str, role_title: str, snapshot_score: str, 
             "status": status,
             "date_added": now,
             "status_updated_at": now,
+            "date_applied": now if status == "Applied" else "",
             "notes": "",
         }
     )
