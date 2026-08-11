@@ -36,6 +36,8 @@ for a role that's since closed, and scoring/tailoring against a dead posting
 wastes the same time this whole tool exists to save.
 """
 
+import re
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -73,18 +75,37 @@ def _extract_meta_description(soup: BeautifulSoup) -> str:
     return ""
 
 
+_TITLE_SUFFIX_RE = re.compile(r"\s*[|\-–—]\s*[^|\-–—]*$")
+
+
+def _extract_page_title(soup: BeautifulSoup) -> str:
+    """Best-effort job title for a manually-pasted URL with no other source
+    of one (e.g. Search & Score's "paste a URL" path, which has no search-
+    result metadata to draw a title from the way a real search does). Most
+    ATS <title> tags are "{Job Title} - {Company}" or "{Job Title} | {Company}",
+    so strip one trailing "- Company"/"| Company" segment if present - a
+    rough heuristic, not a guarantee, but far better than "Unknown role"
+    for the common case."""
+    if not soup.title or not soup.title.string:
+        return ""
+    raw = soup.title.string.strip()
+    return _TITLE_SUFFIX_RE.sub("", raw).strip() or raw
+
+
 def fetch_job_page(url: str, timeout: int = 10) -> dict:
-    """Fetches and cleans a job page, returning both the text and the final
-    URL after redirects — the latter is needed for liveness checking (e.g.
-    Greenhouse redirects to a URL containing 'error=true' when a role has
-    closed)."""
+    """Fetches and cleans a job page, returning the text, the final URL
+    after redirects (needed for liveness checking - e.g. Greenhouse
+    redirects to a URL containing 'error=true' when a role has closed),
+    and a best-effort title parsed from the page's own <title> tag."""
     resp = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Meta tags need to be read before the <head>'s contents get stripped
-    # below, and BeautifulSoup's parsed tree is shared, so grab this first.
+    # Meta tags and <title> need to be read before the <head>'s contents get
+    # stripped below, and BeautifulSoup's parsed tree is shared, so grab
+    # both first.
     meta_description = _extract_meta_description(soup)
+    page_title = _extract_page_title(soup)
 
     for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "form"]):
         tag.decompose()
@@ -99,7 +120,7 @@ def fetch_job_page(url: str, timeout: int = 10) -> dict:
 
     # Generous cap now that forms (the biggest source of bloat) are stripped —
     # this is a safety margin, not the primary defense against noise.
-    return {"text": cleaned[:15000], "final_url": resp.url}
+    return {"text": cleaned[:15000], "final_url": resp.url, "title": page_title}
 
 
 def fetch_job_text(url: str, timeout: int = 10) -> str:

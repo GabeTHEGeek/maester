@@ -55,6 +55,48 @@ def load_default_resume() -> str:
     return ""
 
 
+# Platform -> that source's own search_* function, reused to fetch a single
+# pasted listing's real data (title/description/location/salary) instead of
+# a generic page scrape. This matters specifically because Gem's job DETAIL
+# pages are entirely client-rendered (confirmed directly: a static scrape
+# gets a near-empty shell) - a generic scrape here would silently
+# reintroduce the exact "generic title, no details" bug already fixed for
+# real searches. Querying with an empty query/no title filters returns every
+# posting on that one board unfiltered, so the exact same, already-correct
+# per-platform fetch/normalize logic used by real searches finds the pasted
+# URL's own entry - no new per-platform code needed.
+_URL_SEARCH_FUNCS = {
+    "greenhouse": lambda token: job_source_greenhouse.search_greenhouse("", boards=[token], limit=250),
+    "ashby": lambda token: job_source_ashby.search_ashby("", boards=[token], limit=250),
+    "gem": lambda token: job_source_gem.search_gem("", boards=[token], limit=250),
+    "lever": lambda token: job_source_lever.search_lever("", boards=[token], limit=250),
+    "bamboohr": lambda token: job_source_bamboohr.search_bamboohr("", boards=[token], limit=250),
+}
+
+
+def _fetch_listing_by_url(url: str, token: str, source: str) -> dict:
+    """Finds the exact posting a pasted URL points to by pulling that one
+    board's full listing (unfiltered) through its normal source module and
+    matching by URL - real title/description/location/salary, the same
+    quality real search results get. Returns None if the platform isn't
+    recognized, has no token, or the specific posting isn't in the board's
+    current listing (a stale bookmark, a closed role already dropped from
+    the board) - callers should fall back to a generic page fetch in that
+    case, not treat it as a hard failure."""
+    search_fn = _URL_SEARCH_FUNCS.get(source)
+    if not search_fn or not token:
+        return None
+    try:
+        jobs, _meta = search_fn(token)
+    except Exception:
+        return None
+    target = url.rstrip("/")
+    for job in jobs:
+        if (job.get("url") or "").rstrip("/") == target:
+            return job
+    return None
+
+
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
 if "jobs_by_id" not in st.session_state:
@@ -559,6 +601,91 @@ with tab_search:
                         f"Skipped re-scoring {len(cached_jobs)} listing(s) already seen in a previous "
                         f"search — reused the cached score instead of another API call."
                     )
+
+    st.divider()
+    st.markdown("**Or score a specific listing by URL**")
+    paste_url = st.text_input(
+        "Paste a job URL directly",
+        key="score_url_input",
+        placeholder="https://job-boards.greenhouse.io/company/jobs/12345",
+        help="Recognizes Greenhouse, Ashby, Lever, Gem, and BambooHR URLs and pulls the real listing "
+        "data the same way a search would, and registers the company in the registry below for future "
+        "searches. Other career pages get a best-effort page scrape instead.",
+    )
+    if st.button("Score this URL"):
+        if not api_key:
+            st.error("Add your Anthropic API key in the sidebar first.")
+        elif not resume_text.strip():
+            st.error("Add a resume first.")
+        elif not paste_url.strip():
+            st.error("Paste a job URL first.")
+        else:
+            with st.spinner("Fetching and scoring this listing..."):
+                try:
+                    token, source = parse_company_and_source_from_url(paste_url)
+                    job = _fetch_listing_by_url(paste_url, token, source)
+                    if job is None:
+                        # Unrecognized platform (custom career page), or a
+                        # recognized one where this exact posting wasn't in
+                        # the board's current listing (a stale bookmark,
+                        # already-closed role) - fall back to a generic
+                        # page scrape rather than failing outright.
+                        page = fetch_job_page(paste_url)
+                        liveness = check_liveness(page["text"], page["final_url"])
+                        if liveness["status"] == "expired":
+                            st.warning(f"⚠ This posting may no longer be active: {liveness['reason']}")
+                        job = {
+                            "id": paste_url,
+                            "title": page.get("title") or "Unknown role",
+                            "company": token or "Unknown",
+                            "url": paste_url,
+                            "location": "",
+                            "salary": extract_salary(page["text"]),
+                            "category": "",
+                            "published": "",
+                            "description": page["text"],
+                            "source": source or "unknown",
+                            "board": token or "unknown",
+                        }
+
+                    # Same cache-reuse logic as a real search, scoped to the
+                    # active role profile (see data/dedup.py) - a URL already
+                    # scored under this exact profile doesn't burn a second
+                    # API call.
+                    seen = load_seen_urls()
+                    cached_row = seen.get(job["url"])
+                    if cached_row and cached_row.get("role_profile") == active_profile.id:
+                        result = quick_score_from_cache(cached_row, str(job.get("id", job["url"])))
+                        st.caption("Reused a cached score from a previous search.")
+                    else:
+                        scored = batch_score(
+                            resume_text, [job], api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key
+                        )
+                        result = scored[0]
+                        if result.grade != "?":
+                            record_scans([result])
+
+                    # Ties the pasted URL to the exact job board it came
+                    # from, same self-correcting registry real searches
+                    # already use - only when the URL actually parsed to a
+                    # known platform with a real token; a custom career page
+                    # has nothing to register.
+                    if token and source and source != "unknown":
+                        registry_rows = st.session_state.get("company_registry") or load_registry()
+                        registry_rows = record_discovery(registry_rows, token, source, found=True)
+                        st.session_state.company_registry = registry_rows
+                        save_registry(registry_rows)
+
+                    st.session_state.jobs_by_id[str(result.job_id)] = job
+                    # Prepend, don't replace - coexists with whatever's
+                    # already in search_results instead of wiping it out.
+                    # Re-pasting the same URL replaces its own prior entry
+                    # rather than duplicating it.
+                    existing = [r for r in st.session_state.search_results if r.job_id != result.job_id]
+                    st.session_state.search_results = [result] + existing
+                    st.success(f"Scored: **{result.title}** at **{result.company}** — {result.grade} ({result.score:.1f}/5.0)")
+                except Exception as e:
+                    st.error(f"Couldn't fetch or score this listing: {e}")
 
     if st.session_state.search_results:
         st.markdown(f"### {len(st.session_state.search_results)} listings ranked")
