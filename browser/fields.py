@@ -24,6 +24,7 @@ import json
 import re
 
 from engines.llm_fallback import call_with_fallback
+from engines.text_hygiene import find_banned_phrase, strip_em_dashes
 
 FIELD_MAPPING_MODEL = "claude-sonnet-4-5-20250929"
 
@@ -89,8 +90,10 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
             f"Answer this job application question, grounded ONLY in the resume "
             f"below - never invent experience, employers, or metrics not already "
             f"present in it. If the resume doesn't truly support a strong answer, "
-            f"write an honest, concise one anyway rather than fabricating specifics."
-            f"{limit_instruction}\n\n"
+            f"write an honest, concise one anyway rather than fabricating specifics. "
+            f"Never use em dashes. Avoid AI-sounding filler phrases like \"I'm drawn "
+            f"to\" that name a feeling without a concrete reason attached - say "
+            f"specifically why instead.{limit_instruction}\n\n"
             f"COMPANY: {company}\nROLE: {role_title}\nQUESTION: {question_text}\n\n"
             f"RESUME:\n{resume_text}\n\n"
             f"Respond with ONLY the answer text, 2-4 sentences, no preamble, no "
@@ -107,9 +110,52 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
         deepseek_api_key=deepseek_api_key,
     )
     text = text.strip()
+
+    # Same "prompt instruction is a request, not a guarantee" backstop as
+    # engines/tailor.py's cover letter path - skipped for the options branch
+    # above since that answer must stay an exact, verbatim option label for
+    # _check_group_option's substring match to work.
+    if not options:
+        text = strip_em_dashes(text)
+        banned_phrase = find_banned_phrase(text)
+        if banned_phrase:
+            text = _fix_banned_phrase_in_answer(
+                text, banned_phrase, question_text, api_key, deepseek_api_key
+            )
+            text = strip_em_dashes(text)
+
     if limit and len(text) > limit:
         text = text[:limit].rstrip()
     return text
+
+
+def _fix_banned_phrase_in_answer(answer: str, phrase: str, question_text: str, api_key: str, deepseek_api_key: str = "") -> str:
+    """Same rewrite-don't-delete approach as engines/tailor.py's cover-letter
+    fixer: deleting the phrase outright leaves a broken sentence fragment,
+    so this asks for a real rewrite of just the offending sentence."""
+    fix_prompt = f"""This job-application answer contains the phrase "{phrase}," which names a
+feeling without giving a concrete reason attached to it - exactly the kind of
+AI-sounding filler this answer should never use. Rewrite ONLY the sentence(s)
+containing that phrase so they state a specific, concrete reason instead (a
+real detail from the resume or the question itself), removing the phrase
+entirely. Leave every other sentence completely unchanged. No em dashes.
+
+QUESTION: {question_text}
+
+ANSWER:
+{answer}
+
+Respond with ONLY the full corrected answer text, no JSON, no commentary, no markdown fences."""
+
+    text, _provider = call_with_fallback(
+        system_prompt="",
+        user_prompt=fix_prompt,
+        anthropic_api_key=api_key,
+        anthropic_model=FIELD_MAPPING_MODEL,
+        max_tokens=400,
+        deepseek_api_key=deepseek_api_key,
+    )
+    return text.strip()
 
 
 def _fill_field(page, locator, value: str) -> bool:

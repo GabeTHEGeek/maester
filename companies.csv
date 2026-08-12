@@ -18,19 +18,19 @@ Figma,figma,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 Cursor,cursor,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Brex,brex,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
 Reddit,reddit,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
-Shopify,shopify,lever,failed,2026-08-11T17:03:23,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
+Shopify,shopify,lever,failed,2026-08-11T17:12:00,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Plaid,plaid,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Supabase,supabase,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 PostHog,posthog,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Cohere,cohere,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Twitch,twitch,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
-Weights & Biases,wandb,lever,failed,2026-08-11T17:03:23,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
-Anyscale,anyscale,lever,verified,2026-08-11T17:03:20,Auto-discovered
+Weights & Biases,wandb,lever,failed,2026-08-11T17:12:00,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
+Anyscale,anyscale,lever,verified,2026-08-11T17:11:56,Auto-discovered
 Abridge,abridge,ashby,verified,2026-08-07T00:15:38,Auto-discovered
-Toptal,toptal,lever,verified,2026-08-11T17:03:20,Auto-discovered
+Toptal,toptal,lever,verified,2026-08-11T17:11:56,Auto-discovered
 Upwork,upwork,greenhouse,verified,2026-08-11T02:13:36,Auto-discovered
-Atlassian,atlassian,lever,failed,2026-08-11T17:03:23,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
-Wiz,wiz,lever,failed,2026-08-11T17:03:23,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
+Atlassian,atlassian,lever,failed,2026-08-11T17:12:00,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
+Wiz,wiz,lever,failed,2026-08-11T17:12:00,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Rula,rula,ashby,verified,2026-08-07T00:15:38,Auto-discovered
 Vultron,vultron,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Popsql,popsql,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -1166,7 +1166,7 @@ Candidintelligence,candidintelligence,ashby,unverified,,Bulk-imported from a rea
 Elicit,elicit,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Doinstruct,doinstruct,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 First Resonance,first-resonance,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Perplexity,perplexity,ashby,verified,2026-07-31T21:56:24,Auto-discovered
+Perplexity,perplexity,ashby,verified,2026-08-11T17:15:45,Auto-discovered
 Homemade,homemade,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Allarahealth,allarahealth,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Plasmidsaurus,plasmidsaurus,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -13669,7 +13669,7 @@ Autonomous,autonomous,lever,unverified,,Bulk-imported from a real lever company 
 Hannaandersson,hannaandersson,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Next Health,next-health,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Citcon,citcon,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
-Spotify,spotify,lever,verified,2026-08-11T17:03:20,Auto-discovered
+Spotify,spotify,lever,verified,2026-08-11T17:11:56,Auto-discovered
 Focuspartners,focuspartners,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Cascade Climate,cascade-climate,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search
 Steemit,steemit,lever,unverified,,Bulk-imported from a real lever company directory — pending verification by an actual Maester search

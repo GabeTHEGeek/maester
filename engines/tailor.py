@@ -16,6 +16,7 @@ import re
 from role_profiles import DEFAULT_PROFILE_ID, RoleProfile, get_profile
 from utils.extract import compute_current_role_tenure
 from engines.llm_fallback import call_with_fallback, extract_json
+from engines.text_hygiene import find_banned_phrase, strip_em_dashes
 
 TAILOR_MODEL = "claude-sonnet-4-5-20250929"
 
@@ -377,7 +378,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         )
 
     if "cover_letter" in data:
-        data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
+        data["cover_letter"] = strip_em_dashes(data["cover_letter"])
         word_count = len(data["cover_letter"].split())
         over_sentence_limit = any(
             _count_sentences(p) > 3 for p in data["cover_letter"].split("\n\n") if p.strip()
@@ -386,35 +387,16 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
             data["cover_letter"] = _condense_cover_letter(
                 data["cover_letter"], api_key, model, deepseek_api_key
             )
-            data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
+            data["cover_letter"] = strip_em_dashes(data["cover_letter"])
 
-        banned_phrase = _find_banned_phrase(data["cover_letter"])
+        banned_phrase = find_banned_phrase(data["cover_letter"])
         if banned_phrase:
             data["cover_letter"] = _fix_banned_phrase(
                 data["cover_letter"], banned_phrase, api_key, model, deepseek_api_key
             )
-            data["cover_letter"] = _strip_em_dashes(data["cover_letter"])
+            data["cover_letter"] = strip_em_dashes(data["cover_letter"])
 
     return data
-
-
-# Phrases the prompt already explicitly bans but has been observed slipping
-# through anyway ("I'm drawn to" specifically was reported in real use). This
-# list stays intentionally short — full-sentence phrases the prompt calls out
-# by name as weak, not every word in the larger banned-vocabulary list, since
-# most of those are single words unlikely to need a dedicated rewrite pass.
-_BANNED_PHRASES_NEEDING_REWRITE = [
-    "i'm drawn to",
-    "i am drawn to",
-]
-
-
-def _find_banned_phrase(text: str) -> str:
-    lower_text = text.lower()
-    for phrase in _BANNED_PHRASES_NEEDING_REWRITE:
-        if phrase in lower_text:
-            return phrase
-    return ""
 
 
 def _fix_banned_phrase(cover_letter: str, phrase: str, api_key: str, model: str, deepseek_api_key: str = "") -> str:
@@ -554,16 +536,3 @@ Respond with ONLY the condensed letter text, no JSON, no commentary, no markdown
         deepseek_api_key=deepseek_api_key,
     )
     return text.strip()
-
-
-def _strip_em_dashes(text: str) -> str:
-    """Hard backstop: the prompt instructs zero em dashes, but a model
-    instruction is not a guarantee. Replaces any that slip through with a
-    comma, which is the closest single-character substitute for how em
-    dashes are typically used in this kind of writing (a soft parenthetical
-    pause), then cleans up any resulting double punctuation/spacing."""
-    text = text.replace(" — ", ", ").replace("—", ", ")
-    text = re.sub(r",\s*,", ",", text)
-    text = re.sub(r",\s*\.", ".", text)
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    return text
