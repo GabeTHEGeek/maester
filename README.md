@@ -21,27 +21,50 @@ application when a listing is actually worth the time.
 (Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR) across a self-correcting
 company registry. Every result gets a fast rubric score, a posting
 legitimacy read, a compensation reliability read, and a seniority-aware
-freshness rating, all before you open a single tab.
+freshness rating, all before you open a single tab. A "score a listing by
+URL" box lets you paste any listing directly, resolving it through the same
+accurate per-platform APIs (not a generic scrape) and registering it into
+the company registry.
 
-**2. Deep Dive** — On any listing worth a closer look, a full five-
-perspective panel (Recruiter, Hiring Manager, Engineering Lead, Design Lead,
-Senior PM) evaluates real fit against your actual resume and returns a
-score, tier, gaps, resume fixes, and interview prep questions.
+**2. Role profiles** — A sidebar dropdown switches the entire lens Maester
+searches and judges through: title filters, rubric framing, the deep-dive
+panel's five personas, and tailoring archetypes all swap together. Ships
+with Product Manager, Customer Success, Account Executive, and Chief of
+Staff — each with real title include/exclude filters and a rubric gate
+written to judge transferable substance honestly, not just penalize a
+missing formal title.
 
-**3. Tailor & Export** — Generates a tailored, ATS-safe resume and cover
+**3. Deep Dive** — On any listing worth a closer look, a full five-
+perspective panel (personas depend on the active role profile — e.g.
+Recruiter, Hiring Manager, Engineering Lead, Design Lead, Senior PM for
+Product Manager) evaluates real fit against your actual resume and returns
+a score, tier, gaps, resume fixes, and interview prep questions.
+
+**4. Tailor & Export** — Generates a tailored, ATS-safe resume and cover
 letter grounded in the panel's own findings, with a hard no-fabrication rule
-enforced in code, not just prompted for.
+enforced in code, not just prompted for. Em dashes and AI-sounding filler
+phrases ("I'm drawn to," and more) are stripped and rewritten as a code-level
+backstop, not just a prompt instruction, across both the cover letter and
+drafted application-question answers.
 
-**4. Auto-Fill Applications** — Opens the real application form in a visible
+**5. Auto-Fill Applications** — Opens the real application form in a visible
 browser and fills in what it confidently knows from your resume and saved
 profile facts, stopping short of submit every time — that boundary is
 enforced in code, not just prompted for, with zero exceptions.
 
-**5. Dashboard & notifications** — Every evaluation is logged locally,
+**6. Tracking** — A manually-maintained application pipeline
+(Saved/Applied/Interviewing/Offer/Rejected/Withdrawn), deliberately separate
+from the auto-populated Dashboard. Includes a funnel chart, status
+breakdown, an "applied by day" chart for outreach-goal tracking, and
+conversion-rate metrics (response rate, interview rate, offer rate,
+rejection rate) computed off everyone who ever reached "Applied" or
+further.
+
+**7. Dashboard & notifications** — Every evaluation is logged locally,
 newest first, for comparison at a glance, with optional email summaries sent
 through your own SMTP account.
 
-**6. Automatic fallback** — Optional secondary provider so a billing hiccup
+**8. Automatic fallback** — Optional secondary provider so a billing hiccup
 mid-session doesn't stop your search.
 
 ## Stack
@@ -50,6 +73,7 @@ mid-session doesn't stop your search.
 - **Anthropic API (Claude)** — tiered models for triage vs. deep evaluation
 - **Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR APIs** — live job search, no scraping
 - **Playwright** — visible-browser application auto-fill
+- **Plotly** — Tracking tab funnel, status, and time-series charts
 - **requests + BeautifulSoup** — fallback extraction for manually-pasted URLs
 - **reportlab** — ATS-safe PDF rendering
 - **smtplib** (standard library) — optional email summaries via your own SMTP
