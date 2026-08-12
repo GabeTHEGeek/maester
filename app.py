@@ -39,7 +39,7 @@ from data.tracker import load_all, log_result
 from browser.autofill import open_and_fill
 from data.fill_log import log_fill_attempt
 from role_profiles import get_profile, list_profiles
-from data.pipeline import DEFAULT_STATUS, STATUSES, add_or_update as track_add_or_update, is_tracked, load_all as load_pipeline, save_all as save_pipeline
+from data.pipeline import DEFAULT_STATUS, RECRUITER_CONTACT_VALUES, STATUSES, add_or_update as track_add_or_update, is_tracked, load_all as load_pipeline, save_all as save_pipeline
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 
@@ -1223,11 +1223,18 @@ with tab_tracking:
     # this metric is asking a different question ("of everyone I applied
     # to, how many responded"), so it needs the full denominator.
     applied_ever = applied_active + status_counts.get("Rejected", 0) + status_counts.get("Withdrawn", 0)
-    # A response is any employer-initiated status change after applying —
-    # Rejected counts (they responded, just not favorably); Withdrawn
-    # doesn't by itself, since that's user-initiated and may happen before
-    # or after a response either way.
-    responded_total = interviewing_total + status_counts.get("Rejected", 0)
+    # A response means an actual human reached out - Interviewing/Offer
+    # always qualify (can't reach those without contact). A bare "Rejected"
+    # does NOT count on its own - most rejections are silent ATS
+    # auto-rejects nobody ever read, not a real response. Only counts if
+    # recruiter_contact is explicitly flagged "Yes" on that row. Withdrawn
+    # doesn't count by itself either, since that's user-initiated and may
+    # happen before or after any real contact.
+    contacted_rejected = sum(
+        1 for r in pipeline_rows
+        if r.get("status") == "Rejected" and r.get("recruiter_contact") == "Yes"
+    )
+    responded_total = interviewing_total + contacted_rejected
     response_rate = (responded_total / applied_ever * 100) if applied_ever else 0.0
 
     st.markdown("#### Overview")
@@ -1334,7 +1341,12 @@ with tab_tracking:
             st.caption(f"{len(applied_dates)} applications across {len(applied_day_counts)} active day(s) — {avg_per_active_day:.1f}/day average on days you applied.")
 
         st.markdown("#### Conversion rates")
-        st.caption("Percentages of everyone who ever reached \"Applied\" or further, including Rejected/Withdrawn.")
+        st.caption(
+            "Percentages of everyone who ever reached \"Applied\" or further, including Rejected/"
+            "Withdrawn. Response rate counts Interviewing/Offer plus any Rejected row flagged "
+            "\"Recruiter contact: Yes\" below - a bare Rejected doesn't count on its own, since most "
+            "rejections are silent ATS auto-rejects nobody ever read."
+        )
         rate_cols = st.columns(4)
         rate_cols[0].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
         rate_cols[1].metric("Interview rate", f"{interviewing_total / applied_ever * 100:.0f}%" if applied_ever else "—")
@@ -1343,7 +1355,12 @@ with tab_tracking:
         rate_cols[3].metric("Rejection rate", f"{rejected_rate:.0f}%" if applied_ever else "—")
 
         st.markdown("#### Tracked applications")
-        st.caption("Edit status/notes directly, then save. Removing a row here removes it from tracking.")
+        st.caption(
+            "Edit status/notes directly, then save. \"Recruiter contact?\" only matters for a "
+            "Rejected row - flag \"Yes\" if a real person actually reached out (even to reject you) "
+            "rather than a silent ATS auto-reject; it's set to Yes automatically once a job reaches "
+            "Interviewing or Offer. Removing a row here removes it from tracking."
+        )
         edited_pipeline = st.data_editor(
             pipeline_rows,
             num_rows="dynamic",
@@ -1351,6 +1368,7 @@ with tab_tracking:
             column_config={
                 "url": st.column_config.LinkColumn("Listing", display_text="Open ↗"),
                 "status": st.column_config.SelectboxColumn(options=STATUSES),
+                "recruiter_contact": st.column_config.SelectboxColumn("Recruiter contact?", options=RECRUITER_CONTACT_VALUES),
                 "snapshot_score": st.column_config.TextColumn("Score (at time tracked)", disabled=True),
                 "date_added": st.column_config.TextColumn(disabled=True),
                 "date_applied": st.column_config.TextColumn("Applied on", disabled=True),
@@ -1378,12 +1396,18 @@ with tab_tracking:
                 date_applied = (existing.get("date_applied") if existing else "") or r.get("date_applied") or ""
                 if not date_applied and status in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
                     date_applied = now
+                # Reaching Interviewing/Offer necessarily means a real human
+                # reached out, so force this to Yes regardless of what's in
+                # the editor - the user shouldn't have to remember to flip it
+                # manually for the one case where the answer is guaranteed.
+                recruiter_contact = "Yes" if status in ("Interviewing", "Offer") else (r.get("recruiter_contact") or "No")
                 sanitized_rows.append({
                     "url": url,
                     "company": r.get("company") or "",
                     "role_title": r.get("role_title") or "",
                     "snapshot_score": r.get("snapshot_score") or "",
                     "status": status,
+                    "recruiter_contact": recruiter_contact,
                     "date_added": r.get("date_added") or now,
                     "status_updated_at": status_updated_at,
                     "date_applied": date_applied,

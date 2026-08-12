@@ -24,11 +24,16 @@ FIELDS = [
     "role_title",
     "snapshot_score",
     "status",
+    "recruiter_contact",
     "date_added",
     "status_updated_at",
     "date_applied",
     "notes",
 ]
+
+# "Yes"/"No" rather than a real bool - CSV round-trips strings cleanly and
+# every other status-like field in this file already reads as text.
+RECRUITER_CONTACT_VALUES = ["No", "Yes"]
 
 # Ordered so the Tracking tab's funnel chart reads left-to-right as an actual
 # progression, not just alphabetical. Rejected/Withdrawn are terminal states
@@ -70,6 +75,14 @@ def ensure_pipeline():
             # predate date_applied.
             if not row.get("date_applied") and row.get("status") in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
                 row["date_applied"] = row.get("status_updated_at") or ""
+            # Best-effort backfill for recruiter_contact on rows that predate
+            # it: reaching Interviewing/Offer necessarily means a real human
+            # reached out, so that much can be inferred safely. A bare
+            # Rejected can't be inferred either way (could be an auto-reject
+            # or a real one) - defaults to "No" like every other row, the
+            # user can flip individual ones to "Yes" if they know better.
+            if not row.get("recruiter_contact"):
+                row["recruiter_contact"] = "Yes" if row.get("status") in ("Interviewing", "Offer") else "No"
         save_all(existing_rows)
         return
 
@@ -120,6 +133,7 @@ def add_or_update(url: str, company: str, role_title: str, snapshot_score: str, 
             "role_title": role_title,
             "snapshot_score": snapshot_score,
             "status": status,
+            "recruiter_contact": "No",
             "date_added": now,
             "status_updated_at": now,
             "date_applied": now if status == "Applied" else "",
