@@ -1461,9 +1461,13 @@ with tab_tracking:
     st.markdown("#### Overview")
     # Two rows, grouped by what the numbers actually mean, rather than one
     # cramped row of 7 - "activity" (how much you've done) reads differently
-    # from "pipeline" (where things stand), and splitting them gives each
-    # metric enough width to not feel squeezed on a laptop-width screen.
-    activity_cols = st.columns(3)
+    # from "pipeline" (where things stand). Both rows use the SAME 4-column
+    # grid (row 1 leaves its 4th slot empty) rather than columns(3)/columns(4)
+    # - mismatched column counts per row means each row divides the same
+    # width differently, so nothing lines up vertically between them on a
+    # wide screen (confirmed directly: "Deep dives" and "Interviewing" landed
+    # at different x-positions instead of stacking in the same column).
+    activity_cols = st.columns(4)
     activity_cols[0].metric("Scored", scored_count)
     activity_cols[1].metric("Deep dives", deep_dive_count)
     activity_cols[2].metric("Tracked", tracked_count)
