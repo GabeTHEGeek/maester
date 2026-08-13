@@ -51,6 +51,19 @@ def load_answer_bank() -> list:
         return json.load(f)
 
 
+def is_using_example() -> bool:
+    """True until the user has saved their own bank (via the Setup tab, or
+    by hand-editing sample_data/answer_bank.json directly)."""
+    return not os.path.exists(REAL_PATH)
+
+
+def save_answer_bank(entries: list) -> None:
+    """Writes the real bank - always to REAL_PATH, never EXAMPLE_PATH, same
+    reasoning as data.profile.save_profile."""
+    with open(REAL_PATH, "w") as f:
+        json.dump(entries, f, indent=2)
+
+
 def _normalize(text: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else " " for ch in text).strip()
 

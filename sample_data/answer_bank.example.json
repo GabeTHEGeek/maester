@@ -2,21 +2,21 @@
   {
     "category": "tools_comfort",
     "keywords": ["tools", "comfortable", "software", "stack", "familiar"],
-    "question_example": "What tools are you most comfortable working with?",
+    "question_text": "What tools are you most comfortable working with?",
     "answer": "This is a fictional placeholder answer shipped with the repo. Replace sample_data/answer_bank.json (gitignored) with your own real, approved answers — see sample_data/resume.example.md for the same pattern applied to the resume file.",
     "approved": false
   },
   {
     "category": "why_this_company",
     "keywords": ["why", "company", "interested", "excites", "mission"],
-    "question_example": "Why are you interested in working here?",
+    "question_text": "Why are you interested in working here?",
     "answer": "This is a fictional placeholder answer shipped with the repo. Replace sample_data/answer_bank.json (gitignored) with your own real, approved answers.",
     "approved": false
   },
   {
     "category": "pattern_recognition",
     "keywords": ["pattern", "recognize", "example", "situation", "problem you solved"],
-    "question_example": "Describe a pattern you noticed and how you responded to it.",
+    "question_text": "Describe a pattern you noticed and how you responded to it.",
     "answer": "This is a fictional placeholder answer shipped with the repo. Replace sample_data/answer_bank.json (gitignored) with your own real, approved answers.",
     "approved": false
   }

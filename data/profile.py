@@ -61,6 +61,22 @@ def load_profile() -> dict:
         return json.load(f)
 
 
+def is_using_example() -> bool:
+    """True until the user has saved their own profile (via the Setup tab,
+    or by hand-editing sample_data/profile.json directly) - used to surface
+    a clear "you're on fictional example data" signal instead of letting a
+    new user run a whole session against it without realizing."""
+    return not os.path.exists(REAL_PATH)
+
+
+def save_profile(data: dict) -> None:
+    """Writes the real profile - always to REAL_PATH, never EXAMPLE_PATH, so
+    saving from the Setup tab can't accidentally overwrite the shipped
+    fictional placeholder other users rely on as their own starting point."""
+    with open(REAL_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
 def known_topics() -> list:
     """The topic keys this profile has real answers for, fed to the
     field-mapping LLM so it can recognize a differently-worded question as

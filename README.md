@@ -50,7 +50,10 @@ drafted application-question answers.
 **5. Auto-Fill Applications** — Opens the real application form in a visible
 browser and fills in what it confidently knows from your resume and saved
 profile facts, stopping short of submit every time — that boundary is
-enforced in code, not just prompted for, with zero exceptions.
+enforced in code, not just prompted for, with zero exceptions. Profile facts
+(work authorization, visa needs, EEO/demographic answers) and a reusable
+answer bank for common application questions are both editable from the
+in-app **Setup** tab — no manual JSON editing required.
 
 **6. Tracking** — A manually-maintained application pipeline
 (Saved/Applied/Interviewing/Offer/Rejected/Withdrawn), deliberately separate
@@ -105,20 +108,33 @@ mid-session doesn't stop your search.
    ```bash
    streamlit run app.py
    ```
-6. **(Optional) Set up local-only extras** — a `.env` file in the project
+6. **Fill in your Setup tab** — the app opens with a warning banner if
+   you're still on the fictional example resume/profile/answer bank. The
+   **Setup** tab has a checklist plus in-app editors for your profile facts
+   (work authorization, visa needs, EEO/demographic answers) and answer
+   bank (reusable answers to common application questions) — no manual JSON
+   editing needed, everything saves straight to `sample_data/` locally. Both
+   only matter for Auto-Fill Applications; Search & Score, Deep Dive, and
+   Tailor & Export only need your resume.
+7. **(Optional) Set up local-only extras** — a `.env` file in the project
    root can hold `LINKEDIN_URL`, `PORTFOLIO_URL`, `GITHUB_URL` (pre-fill the
    sidebar's link fields) and `DEEPSEEK_API_KEY`. `.env` is gitignored, never
    committed.
 
-## Your resume
+## Your resume, profile, and answer bank
 
-`sample_data/resume.md` is gitignored on purpose — it's meant to hold your
-real resume and is never committed. A fictional placeholder,
-`sample_data/resume.example.md`, ships in the repo so the app has a working
-default out of the box. To use your own: either paste it into the sidebar at
-runtime, or replace `sample_data/resume.md` locally (it'll stay untracked).
-If you fork this repo, double-check `git ls-files | grep resume` only shows
-`resume.example.md` before you push.
+`sample_data/resume.md`, `sample_data/profile.json`, and
+`sample_data/answer_bank.json` are all gitignored on purpose — they're meant
+to hold your real, personal data and are never committed. Fictional
+placeholders (`resume.example.md`, `profile.example.json`,
+`answer_bank.example.json`) ship in the repo so the app has a working
+default out of the box, and the sidebar shows a warning banner whenever
+you're still running on one of them. To use your own: paste your resume
+into the sidebar at runtime or replace `resume.md` locally, and use the
+**Setup** tab to fill in your profile facts and answer bank (no manual
+JSON editing needed). If you fork this repo, double-check
+`git ls-files | grep -E "resume|profile|answer_bank"` only shows the
+`.example.*` files before you push.
 
 ## What this deliberately doesn't do
 

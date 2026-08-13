@@ -40,6 +40,8 @@ from browser.autofill import open_and_fill
 from data.fill_log import log_fill_attempt
 from role_profiles import get_profile, list_profiles
 from data.pipeline import DEFAULT_STATUS, RECRUITER_CONTACT_VALUES, STATUSES, add_or_update as track_add_or_update, is_tracked, load_all as load_pipeline, save_all as save_pipeline
+from data.profile import is_using_example as profile_is_example, load_profile, save_profile
+from data.answer_bank import is_using_example as answer_bank_is_example, load_answer_bank, save_answer_bank
 
 st.set_page_config(page_title="Maester", page_icon="\U0001F56F", layout="wide")
 
@@ -115,8 +117,21 @@ st.caption(
     "before you write a single word of a tailored application."
 )
 
+_setup_gaps = []
+if not os.path.exists(DEFAULT_RESUME_PATH):
+    _setup_gaps.append("resume")
+if profile_is_example():
+    _setup_gaps.append("profile")
+if answer_bank_is_example():
+    _setup_gaps.append("answer bank")
+if _setup_gaps:
+    st.warning(
+        f"Running on the fictional example {' / '.join(_setup_gaps)} — results won't reflect your "
+        "real background. Head to the **Setup** tab to add your own."
+    )
+
 with st.sidebar:
-    st.header("Setup")
+    st.header("Configuration")
     api_key = st.text_input(
         "Anthropic API key",
         type="password",
@@ -181,9 +196,169 @@ with st.sidebar:
             smtp_port = st.number_input("Port", value=587, key="smtp_port")
         auto_email = st.checkbox("Automatically email me a summary after each Deep Dive run", value=False)
 
-tab_search, tab_deep_dive, tab_dashboard, tab_tracking = st.tabs(
-    ["Search & Score", "Deep Dive", "Dashboard", "Tracking"]
+tab_setup, tab_search, tab_deep_dive, tab_dashboard, tab_tracking = st.tabs(
+    ["Setup", "Search & Score", "Deep Dive", "Dashboard", "Tracking"]
 )
+
+# ---------------------------------------------------------------------------
+# TAB 0: Setup — onboarding checklist plus in-app editors for the two files
+# that used to be hand-edit-JSON-only (profile.json, answer_bank.json).
+# Resume is still edited from the sidebar (already had a UI); this tab
+# exists for the two that never had one. See data/profile.py and
+# data/answer_bank.py for what each file is actually used for.
+# ---------------------------------------------------------------------------
+with tab_setup:
+    st.subheader("Setup checklist")
+    st.caption(
+        "Everything below is your real, personal data. It's saved to sample_data/ locally and "
+        "gitignored by default — none of it is ever committed or sent anywhere except the LLM "
+        "calls Maester itself makes on your behalf."
+    )
+
+    status_cols = st.columns(3)
+    status_cols[0].metric("Resume", "Set" if os.path.exists(DEFAULT_RESUME_PATH) else "Example")
+    status_cols[1].metric("Profile", "Set" if not profile_is_example() else "Example")
+    status_cols[2].metric("Answer bank", "Set" if not answer_bank_is_example() else "Example")
+
+    if not os.path.exists(DEFAULT_RESUME_PATH):
+        st.caption(
+            "**Resume**: paste your own in the sidebar under Resume (select \"Paste my own\"), "
+            "or replace sample_data/resume.md directly. Currently showing the fictional example."
+        )
+
+    st.divider()
+    st.subheader("Profile facts")
+    st.caption(
+        "Static personal facts used to auto-answer application questions during Auto-Fill "
+        "(work authorization, visa needs, EEO/demographic questions, etc.) — a form asking "
+        "the same real question in different words still resolves to what you enter here. "
+        "Each field accepts multiple acceptable phrasings, ONE PER LINE, since different "
+        "employers' dropdowns word the same answer differently (e.g. \"Yes\" vs. \"Authorized "
+        "to work in the US\") — not comma-separated, since a real phrasing can itself contain "
+        "a comma."
+    )
+
+    _profile_data = load_profile()
+
+    def _profile_field(key: str, label: str, help_text: str = "") -> None:
+        existing = _profile_data.get(key)
+        existing_str = "\n".join(existing) if isinstance(existing, list) else (existing or "")
+        st.text_area(label, value=existing_str, height=68, key=f"profile_field_{key}", help=help_text)
+
+    with st.expander("Work authorization & logistics", expanded=True):
+        _profile_field("work_authorization_us", "Authorized to work in the US?")
+        _profile_field("visa_sponsorship_needed", "Need visa sponsorship?")
+        _profile_field("city", "City")
+        _profile_field("state", "State")
+        _profile_field("country", "Country")
+        _profile_field("current_company", "Current company")
+        _profile_field("middle_name", "Middle name")
+        _profile_field("how_did_you_hear", "How did you hear about us? (default answer)")
+
+    with st.expander("EEO / demographic (optional — only answered if a form explicitly asks)"):
+        _profile_field("gender_identity", "Gender identity")
+        _profile_field("pronouns", "Pronouns")
+        _profile_field("transgender_experience", "Transgender experience")
+        _profile_field("sexual_orientation", "Sexual orientation")
+        _profile_field("disability_status", "Disability status")
+        _profile_field("veteran_status", "Veteran status")
+        _profile_field("ethnicity", "Race/ethnicity")
+
+    with st.expander("Experience (years)"):
+        st.caption(
+            "Answers \"do you have at least N years of X experience\" gate questions without "
+            "redrafting the same true answer on every listing. \"Total\" is checked when no "
+            "more specific domain matches."
+        )
+        _existing_years = _profile_data.get("experience_years") or {}
+        total_years = st.number_input(
+            "Total years of experience", min_value=0, max_value=60,
+            value=int(_existing_years.get("total", 0)), key="profile_total_years",
+        )
+        _domain_rows = [
+            {"domain": k, "years": v} for k, v in _existing_years.items() if k != "total"
+        ]
+        edited_domain_rows = st.data_editor(
+            _domain_rows,
+            num_rows="dynamic",
+            width='stretch',
+            column_config={
+                "domain": st.column_config.TextColumn("Domain (e.g. product_management)"),
+                "years": st.column_config.NumberColumn("Years", min_value=0, max_value=60),
+            },
+            key="profile_domain_years_editor",
+        )
+
+    if st.button("Save profile"):
+        new_profile = {}
+        for key in [
+            "work_authorization_us", "visa_sponsorship_needed", "city", "state", "country",
+            "current_company", "middle_name", "how_did_you_hear", "gender_identity", "pronouns",
+            "transgender_experience", "sexual_orientation", "disability_status", "veteran_status",
+            "ethnicity",
+        ]:
+            raw = st.session_state.get(f"profile_field_{key}", "")
+            phrasings = [p.strip() for p in raw.splitlines() if p.strip()]
+            if phrasings:
+                new_profile[key] = phrasings
+        exp_years = {}
+        if total_years > 0:
+            exp_years["total"] = int(total_years)
+        for row in edited_domain_rows:
+            domain = (row.get("domain") or "").strip()
+            years = row.get("years")
+            if domain and years not in (None, ""):
+                exp_years[domain] = int(years)
+        if exp_years:
+            new_profile["experience_years"] = exp_years
+        save_profile(new_profile)
+        st.success("Profile saved.")
+        st.rerun()
+
+    st.divider()
+    st.subheader("Answer bank")
+    st.caption(
+        "Previously-written, approved answers to common application questions — checked before "
+        "drafting a fresh one, so a reused question never costs an API call or shows up as an "
+        "unreviewed draft. \"Keywords\" needs at least 2 matches against a question's text to "
+        "trigger a reuse; leave \"Approved\" unchecked until you've actually reviewed the answer."
+    )
+
+    _bank_rows = [
+        {**entry, "keywords": ", ".join(entry.get("keywords", []))}
+        for entry in load_answer_bank()
+    ]
+    edited_bank_rows = st.data_editor(
+        _bank_rows,
+        num_rows="dynamic",
+        width='stretch',
+        column_config={
+            "category": st.column_config.TextColumn("Category"),
+            "keywords": st.column_config.TextColumn("Keywords (comma-separated)"),
+            "question_text": st.column_config.TextColumn("Example question"),
+            "answer": st.column_config.TextColumn("Answer", width="large"),
+            "approved": st.column_config.CheckboxColumn("Approved"),
+        },
+        key="answer_bank_editor",
+    )
+    if st.button("Save answer bank"):
+        sanitized_bank = []
+        for row in edited_bank_rows:
+            question_text = (row.get("question_text") or "").strip()
+            answer = (row.get("answer") or "").strip()
+            if not question_text or not answer:
+                continue  # a blank row added but never filled in — skip it
+            keywords = [k.strip() for k in (row.get("keywords") or "").split(",") if k.strip()]
+            sanitized_bank.append({
+                "category": (row.get("category") or "").strip(),
+                "keywords": keywords,
+                "question_text": question_text,
+                "answer": answer,
+                "approved": bool(row.get("approved")),
+            })
+        save_answer_bank(sanitized_bank)
+        st.success("Answer bank saved.")
+        st.rerun()
 
 # ---------------------------------------------------------------------------
 # TAB 1: Search & Score — the agentic loop. Query -> live listings -> ranked scores.
