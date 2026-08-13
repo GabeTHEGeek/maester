@@ -73,9 +73,29 @@ beats "experienced leader focused on growth," using whatever specific figures
 the source resume actually has. HARD LIMIT: the summary paragraph is 3
 sentences maximum — compress by cutting words, not by removing the strongest
 proof points; a tight 2-sentence summary beats a 3-sentence one padded to
-fill the limit. Keep the same structure (same headers, same roles, same
+fill the limit. Keep the same structure (same sections, same roles, same
 companies, same dates) and the same overall length otherwise — this is a
-reordering and rewording pass, not a rewrite.
+reordering and rewording pass, not a rewrite of the CONTENT.
+
+OUTPUT FORMAT (non-negotiable, applies regardless of what formatting the
+source resume used): tailored_resume_markdown must ALWAYS be normalized into
+this exact Markdown convention, even if the source resume was plain text, used
+different bullet characters, or had no Markdown syntax at all — this is a
+formatting normalization, not a content change, and the PDF renderer that
+consumes this output only recognizes this exact syntax:
+- Line 1: "# Full Name" (a single #, nothing else on that line)
+- Line 2: the contact line (location | phone | email), plain text, no markdown
+- "## Section Name" for every major section (Summary, Experience, Technical
+  Skills, Education, Certifications, etc.) — always "##", never "#" or "###"
+- Within Experience, each role as "### Company — Title" immediately followed
+  on its own next line by "*Month Year – Month Year*" (or "*Present*"),
+  wrapped in single asterisks and nothing else on that line
+- Every bullet point starts the line with "- " (hyphen, space) — never "•",
+  "●", "*", "○", or any other bullet character
+- Bold with "**text**", italic with "*text*" — no other inline markup
+If the source resume used different heading levels, inline dates, or a
+different bullet character, convert it to this convention; do not carry the
+source's own markup or bullet characters through unchanged.
 
 BULLET QUALITY: when rewording a bullet, follow the shape Action + system/
 scope + tool or approach + outcome + proof — "Resolved X in Y, improving Z,"

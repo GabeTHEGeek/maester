@@ -222,6 +222,24 @@ def _is_date_line(text: str) -> bool:
     return t.startswith("*") and t.endswith("*") and not t.startswith("**")
 
 
+# The tailoring prompt requires "- " bullets, but that's a request, not a
+# guarantee (see CLAUDE.md) - a source resume pasted as plain extracted PDF
+# text often already uses one of these characters as its own bullet marker,
+# and a model asked to "keep the same structure" has been observed carrying
+# it through unchanged instead of normalizing it. Recognized here as a
+# backstop so those still render as real bulleted list items instead of
+# silently falling through to a plain left-aligned paragraph with the raw
+# bullet character stuck in the text.
+_BULLET_PREFIXES = ("- ", "* ", "• ", "● ", "◦ ", "– ")
+
+
+def _strip_bullet_prefix(stripped: str) -> str:
+    for prefix in _BULLET_PREFIXES:
+        if stripped.startswith(prefix):
+            return stripped[len(prefix):].strip()
+    return stripped
+
+
 def render_resume_pdf(
     markdown_text: str,
     output_path: str,
@@ -255,6 +273,21 @@ def render_resume_pdf(
 
     story = []
     lines = markdown_text.splitlines()
+
+    # The tailoring prompt requires "# Name" as line 1, but that's a request,
+    # not a guarantee - confirmed directly: a source resume pasted as plain
+    # extracted text (no Markdown at all) produced tailored output that also
+    # skipped the "# " prefix on its own name line. Without this, the header
+    # state machine below never leaves "awaiting_name", so the contact line
+    # right after ALSO falls through to plain left-aligned body text - one
+    # missing "# " silently breaks both lines, not just the name. The first
+    # non-blank line of a resume is always the candidate's name, so normalize
+    # it here rather than trusting the model got the prefix right.
+    for idx, raw_line in enumerate(lines):
+        if raw_line.strip():
+            if not raw_line.strip().startswith("# "):
+                lines[idx] = f"# {raw_line.strip()}"
+            break
 
     header_stage = "awaiting_name"  # -> "awaiting_contact" -> "done"
     summary_seen = False
@@ -320,8 +353,8 @@ def render_resume_pdf(
             # happen given the lookahead above, but handle it gracefully).
             story.append(Paragraph(_inline_markdown_to_reportlab(stripped), _DATE_STYLE))
             i += 1
-        elif stripped.startswith("- "):
-            bullet_text = _inline_markdown_to_reportlab(stripped[2:].strip())
+        elif stripped.startswith(_BULLET_PREFIXES):
+            bullet_text = _inline_markdown_to_reportlab(_strip_bullet_prefix(stripped))
             story.append(Paragraph(bullet_text, _BULLET_STYLE, bulletText="\u2022"))
             i += 1
         else:
