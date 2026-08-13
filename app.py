@@ -148,15 +148,6 @@ with st.sidebar:
         "Leave blank to disable — a billing error will just fail normally, as before.",
     )
     st.divider()
-    st.subheader("Resume")
-    resume_source = st.radio("Resume source", ["Use default", "Paste my own"], index=0)
-    if resume_source == "Paste my own":
-        resume_text = st.text_area("Paste resume text", height=300)
-    else:
-        resume_text = load_default_resume()
-        st.text_area("Preview", value=resume_text, height=200, disabled=True)
-
-    st.divider()
     st.subheader("Role type")
     _profiles = list_profiles()
     active_profile = st.selectbox(
@@ -169,15 +160,15 @@ with st.sidebar:
         "is framed for this role type. Applies to your next search.",
         key="role_profile_select",
     )
+    st.caption("Resume, profile facts, and answer bank now live on the **Setup** tab.")
 
     st.divider()
-    st.subheader("Links (optional)")
-    st.caption("Included as hyperlinks in the header of both the tailored resume and cover letter, when provided.")
-    linkedin_url = st.text_input("LinkedIn URL", value=os.environ.get("LINKEDIN_URL", ""))
-    portfolio_url = st.text_input("Portfolio URL", value=os.environ.get("PORTFOLIO_URL", ""))
-    github_url = st.text_input("GitHub URL", value=os.environ.get("GITHUB_URL", ""))
+    with st.expander("Links (optional)"):
+        st.caption("Included as hyperlinks in the header of both the tailored resume and cover letter, when provided.")
+        linkedin_url = st.text_input("LinkedIn URL", value=os.environ.get("LINKEDIN_URL", ""))
+        portfolio_url = st.text_input("Portfolio URL", value=os.environ.get("PORTFOLIO_URL", ""))
+        github_url = st.text_input("GitHub URL", value=os.environ.get("GITHUB_URL", ""))
 
-    st.divider()
     with st.expander("Email notifications (optional)"):
         st.caption(
             "Sends via your own SMTP account. For Gmail, use an App Password, "
@@ -196,18 +187,29 @@ with st.sidebar:
             smtp_port = st.number_input("Port", value=587, key="smtp_port")
         auto_email = st.checkbox("Automatically email me a summary after each Deep Dive run", value=False)
 
-tab_setup, tab_search, tab_deep_dive, tab_dashboard, tab_tracking = st.tabs(
-    ["Setup", "Search & Score", "Deep Dive", "Dashboard", "Tracking"]
+tab_search, tab_deep_dive, tab_dashboard, tab_tracking, tab_setup = st.tabs(
+    ["Search & Score", "Deep Dive", "Dashboard", "Tracking", "Setup"]
 )
 
-# ---------------------------------------------------------------------------
-# TAB 0: Setup — onboarding checklist plus in-app editors for the two files
-# that used to be hand-edit-JSON-only (profile.json, answer_bank.json).
-# Resume is still edited from the sidebar (already had a UI); this tab
-# exists for the two that never had one. See data/profile.py and
-# data/answer_bank.py for what each file is actually used for.
+# TAB 5: Setup — resume, plus onboarding checklist and in-app editors for
+# the two files that used to be hand-edit-JSON-only (profile.json,
+# answer_bank.json). Physically placed here, right after st.tabs(), even
+# though "Setup" is the LAST tab visually - Streamlit tab position is
+# controlled entirely by the label order passed to st.tabs(), not by where
+# each `with tab_x:` block appears in the script, and resume_text has to be
+# defined before the Search/Deep Dive/Tailor code below reads it. See
+# data/profile.py and data/answer_bank.py for what each file is used for.
 # ---------------------------------------------------------------------------
 with tab_setup:
+    st.subheader("Resume")
+    resume_source = st.radio("Resume source", ["Use default", "Paste my own"], index=0)
+    if resume_source == "Paste my own":
+        resume_text = st.text_area("Paste resume text", height=300)
+    else:
+        resume_text = load_default_resume()
+        st.text_area("Preview", value=resume_text, height=200, disabled=True)
+
+    st.divider()
     st.subheader("Setup checklist")
     st.caption(
         "Everything below is your real, personal data. It's saved to sample_data/ locally and "
@@ -222,8 +224,8 @@ with tab_setup:
 
     if not os.path.exists(DEFAULT_RESUME_PATH):
         st.caption(
-            "**Resume**: paste your own in the sidebar under Resume (select \"Paste my own\"), "
-            "or replace sample_data/resume.md directly. Currently showing the fictional example."
+            "**Resume**: paste your own above (select \"Paste my own\"), or replace "
+            "sample_data/resume.md directly. Currently showing the fictional example."
         )
 
     st.divider()
@@ -1009,6 +1011,14 @@ with tab_deep_dive:
                 "board": parsed_company or "unknown",
             }
 
+    if not target_job:
+        st.caption(
+            "Runs your resume against this listing through a simulated 5-perspective hiring "
+            "panel (personas depend on the active Role type in the sidebar) and returns a "
+            "score, tier, real gaps, resume fixes, and interview prep questions — takes about "
+            "15-30 seconds. Pick a listing from Search & Score, or paste a URL above, to begin."
+        )
+
     if st.button("Run full panel", type="primary"):
         if not api_key:
             st.error("Add your Anthropic API key in the sidebar first.")
@@ -1366,11 +1376,47 @@ with tab_dashboard:
         # (log_result uses datetime.isoformat()), so a plain lexicographic
         # sort is already chronological, no parsing needed.
         rows_sorted = sorted(rows, key=lambda r: r.get("timestamp") or "", reverse=True)
+
+        # Curated, human-labeled view rather than a raw CSV column dump -
+        # the underlying file's exact 14 columns and their order are an
+        # implementation detail, not something a reader should have to parse
+        # (a bare "product_manager" role_profile id, a full-precision ISO
+        # timestamp, and a link column buried at the end were all real
+        # scanability problems here). Score/tier/recommendation lead since
+        # that's the actual triage decision; the listing link trails last as
+        # a follow-up action, not something to read.
+        def _format_timestamp(raw: str) -> str:
+            try:
+                return datetime.fromisoformat(raw).strftime("%b %d, %Y %I:%M %p")
+            except ValueError:
+                return raw
+
+        display_rows = [
+            {
+                "Company": r.get("company") or "",
+                "Role": r.get("role_title") or "",
+                "Score": r.get("fit_score") or "",
+                "Tier": r.get("tier") or "",
+                "Recommendation": r.get("recommendation") or "",
+                "Top gaps": r.get("top_gaps") or "",
+                "Role type": get_profile(r.get("role_profile") or "").display_name,
+                "Location": r.get("location") or "",
+                "Salary": r.get("salary") or "",
+                "Legitimacy": r.get("legitimacy_tier") or "",
+                "Comp reliability": r.get("comp_reliability") or "",
+                "Source": r.get("source") or "",
+                "When": _format_timestamp(r.get("timestamp") or ""),
+                "Listing": r.get("url") or "",
+            }
+            for r in rows_sorted
+        ]
         st.dataframe(
-            rows_sorted,
+            display_rows,
             width='stretch',
+            hide_index=True,
             column_config={
-                "url": st.column_config.LinkColumn("Listing", display_text="Open ↗")
+                "Listing": st.column_config.LinkColumn("Listing", display_text="Open ↗"),
+                "Score": st.column_config.NumberColumn("Score"),
             },
         )
 
@@ -1413,14 +1459,20 @@ with tab_tracking:
     response_rate = (responded_total / applied_ever * 100) if applied_ever else 0.0
 
     st.markdown("#### Overview")
-    metric_cols = st.columns(7)
-    metric_cols[0].metric("Scored", scored_count)
-    metric_cols[1].metric("Deep dives", deep_dive_count)
-    metric_cols[2].metric("Tracked", tracked_count)
-    metric_cols[3].metric("Applied", applied_active)
-    metric_cols[4].metric("Interviewing", interviewing_total)
-    metric_cols[5].metric("Offers", offer_total)
-    metric_cols[6].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
+    # Two rows, grouped by what the numbers actually mean, rather than one
+    # cramped row of 7 - "activity" (how much you've done) reads differently
+    # from "pipeline" (where things stand), and splitting them gives each
+    # metric enough width to not feel squeezed on a laptop-width screen.
+    activity_cols = st.columns(3)
+    activity_cols[0].metric("Scored", scored_count)
+    activity_cols[1].metric("Deep dives", deep_dive_count)
+    activity_cols[2].metric("Tracked", tracked_count)
+
+    pipeline_cols = st.columns(4)
+    pipeline_cols[0].metric("Applied", applied_active)
+    pipeline_cols[1].metric("Interviewing", interviewing_total)
+    pipeline_cols[2].metric("Offers", offer_total)
+    pipeline_cols[3].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
 
     if not pipeline_rows:
         st.info(
@@ -1591,3 +1643,5 @@ with tab_tracking:
             save_pipeline(sanitized_rows)
             st.success("Saved.")
             st.rerun()
+
+# ---------------------------------------------------------------------------
