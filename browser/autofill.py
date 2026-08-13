@@ -56,6 +56,7 @@ explicitly chose to auto-check it after being told exactly what it means).
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from playwright.sync_api import sync_playwright
 
@@ -277,33 +278,60 @@ def _try_topic_answer(page, raw_entry: dict, locator, topic) -> tuple:
 # the user mid-review.
 _LIVE_SESSIONS = {}
 
-# One shared Playwright browser + context for the whole process, not a fresh
-# `chromium.launch()` per listing. Confirmed directly this matters: launching
-# a brand-new Chromium process every time opens a brand-new OS window every
-# time, so auto-filling a handful of listings in one session left that many
-# separate windows piling up. Multiple context.new_page() calls on the SAME
-# context open as tabs in one window instead - this module now launches once
-# and reuses that browser/context for every subsequent listing.
-_shared_playwright = None
-_shared_browser = None
-_shared_context = None
+# All Playwright work for the whole process runs on this ONE persistent
+# background thread - not whatever thread Streamlit happens to run a given
+# script rerun on, and not a fresh chromium.launch() per listing either.
+# Both matter for the same underlying reason, confirmed directly (twice):
+#
+# 1. Launching a brand-new Chromium PROCESS per listing opens a brand-new OS
+#    WINDOW per listing - auto-filling a handful of listings in one session
+#    left that many separate windows piling up.
+# 2. The tempting fix, holding one (playwright, browser, context) triple at
+#    module level and reusing it across calls, crashes: Playwright's sync
+#    API is greenlet-bound to whichever OS thread created it, and Streamlit
+#    runs each script rerun on a FRESH thread, so a later rerun's call into
+#    a Playwright object created on an earlier rerun's (now-exited) thread
+#    raises "cannot switch to a different thread (which happens to have
+#    exited)".
+# 3. The next tempting fix, reconnecting fresh via connect_over_cdp() on
+#    every call instead of reusing the original driver object, ALSO
+#    crashes - not from a thread mismatch this time, but because
+#    Playwright's sync API only tolerates one ACTIVE started() instance per
+#    process at all; a second sync_playwright().start() call in the same
+#    thread, even sequential and non-overlapping with the first, raises
+#    "It looks like you are using Playwright Sync API inside the asyncio
+#    loop."
+#
+# The only combination that satisfies both constraints - one browser process
+# reused across listings, AND Playwright objects never touched from a thread
+# other than the one that created them - is to never let the Streamlit rerun
+# thread touch Playwright objects at all. Every real call submits its work to
+# this single dedicated worker thread instead and blocks for the result;
+# max_workers=1 guarantees every job lands on the SAME OS thread for the life
+# of the process, so the browser/context created on the first job stay valid
+# for every job after it.
+_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="maester-playwright")
+
+_worker_playwright = None
+_worker_browser = None
+_worker_context = None
 
 
 def _get_shared_context():
-    """Returns the shared (playwright, browser, context) triple, launching it
-    on first use and relaunching if the user closed the window themselves
-    (browser.is_connected() goes False) rather than erroring on a dead
-    browser reference."""
-    global _shared_playwright, _shared_browser, _shared_context
-    if _shared_browser is not None and not _shared_browser.is_connected():
-        _shared_playwright = None
-        _shared_browser = None
-        _shared_context = None
-    if _shared_context is None:
-        _shared_playwright = sync_playwright().start()
-        _shared_browser = _shared_playwright.chromium.launch(headless=False)
-        _shared_context = _shared_browser.new_context(viewport={"width": 1600, "height": 1000})
-    return _shared_playwright, _shared_browser, _shared_context
+    """Must only ever be called from a job running on `_executor`'s worker
+    thread. Launches the shared browser/context on first use, relaunches if
+    the user closed the window themselves (browser.is_connected() goes
+    False) rather than erroring on a dead browser reference."""
+    global _worker_playwright, _worker_browser, _worker_context
+    if _worker_browser is not None and not _worker_browser.is_connected():
+        _worker_playwright = None
+        _worker_browser = None
+        _worker_context = None
+    if _worker_context is None:
+        _worker_playwright = sync_playwright().start()
+        _worker_browser = _worker_playwright.chromium.launch(headless=False)
+        _worker_context = _worker_browser.new_context(viewport={"width": 1600, "height": 1000})
+    return _worker_playwright, _worker_browser, _worker_context
 
 
 class FillResult:
@@ -454,7 +482,15 @@ def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
     question from one that should only ever be answered from a saved,
     pre-approved fact (see the "demographic_question" handling in
     open_and_fill).
-    """
+
+    Thin wrapper: the real work runs on the dedicated Playwright worker
+    thread via `_executor` (see the comment above `_get_shared_context`) -
+    every Playwright object this touches, all the way down, must stay on
+    that one thread for the life of the process."""
+    return _executor.submit(_scan_questions_worker, url, api_key, deepseek_api_key, session_key).result()
+
+
+def _scan_questions_worker(url, api_key, deepseek_api_key, session_key):
     discovery = _discover_and_map(url, api_key, deepseek_api_key, session_key=f"scan-{session_key or url}")
 
     questions = []
@@ -476,10 +512,10 @@ def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
 
     # Scanning is preview-only - always close the tab it opened, unlike
     # open_and_fill which deliberately leaves it open for review. Closes
-    # just this page now, not the whole browser/playwright driver - those
-    # are shared across every listing (see _get_shared_context), so tearing
-    # them down here would also kill any other tab currently open for
-    # review from a prior open_and_fill call.
+    # just this page, never the shared browser/driver itself - those live
+    # for the whole process (see _get_shared_context) and closing either
+    # would kill every other tab currently open for review from a prior
+    # open_and_fill call, in this session or any other.
     if discovery.page is not None:
         try:
             discovery.page.close()
@@ -508,7 +544,30 @@ def open_and_fill(
     flags answers to genuinely new custom questions, and stops. The browser
     is left open and untouched at that final state - nothing in this
     function, or anything it calls, submits the form. See module docstring.
-    """
+
+    Thin wrapper: the real work runs on the dedicated Playwright worker
+    thread via `_executor` (see the comment above `_get_shared_context`) -
+    every Playwright object this touches, all the way down, must stay on
+    that one thread for the life of the process."""
+    return _executor.submit(
+        _open_and_fill_worker, url, resume_text, company, role_title, contact_info,
+        links, resume_pdf_path, cover_letter_pdf_path, api_key, deepseek_api_key, session_key,
+    ).result()
+
+
+def _open_and_fill_worker(
+    url,
+    resume_text,
+    company,
+    role_title,
+    contact_info,
+    links,
+    resume_pdf_path,
+    cover_letter_pdf_path,
+    api_key,
+    deepseek_api_key,
+    session_key,
+):
     discovery = _discover_and_map(url, api_key, deepseek_api_key, session_key=session_key)
 
     if discovery.status in ("dead", "error"):
