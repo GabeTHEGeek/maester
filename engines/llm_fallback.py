@@ -159,6 +159,7 @@ def call_with_fallback(
     client = anthropic.Anthropic(
         api_key=anthropic_api_key, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES
     )
+    _start = time.monotonic()
     try:
         response = client.messages.create(
             model=anthropic_model,
@@ -167,10 +168,24 @@ def call_with_fallback(
             temperature=temperature,
             messages=[{"role": "user", "content": user_prompt}],
         )
+        elapsed = time.monotonic() - _start
+        if elapsed > 20:
+            print(f"[llm_fallback] Anthropic call succeeded but took {elapsed:.1f}s", flush=True)
         return _extract_text(response), "anthropic"
     except Exception as e:
+        # Nothing was printed here before — a slow-but-working request and a
+        # genuinely frozen one looked identical from the terminal, since this
+        # exception was caught and handled silently. Real evidence from
+        # actual use: a single Deep Dive took ~5 minutes wall time with zero
+        # log output the entire way, impossible to tell apart from a hang
+        # without adding this. `max_retries=1` above means the SDK may have
+        # already silently retried once before this exception ever surfaces,
+        # so the elapsed time here can already be ~2x the request timeout.
+        elapsed = time.monotonic() - _start
+        print(f"[llm_fallback] Anthropic call failed after {elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
         if not (_is_billing_error(e) or _is_timeout_or_connection_error(e)) or not deepseek_api_key:
             raise
+        print("[llm_fallback] Falling back to DeepSeek...")
 
     deepseek_client = anthropic.Anthropic(
         api_key=deepseek_api_key,
@@ -180,6 +195,7 @@ def call_with_fallback(
     )
     last_error = None
     for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
+        _attempt_start = time.monotonic()
         try:
             response = deepseek_client.messages.create(
                 model=deepseek_model,
@@ -197,11 +213,16 @@ def call_with_fallback(
                 thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": user_prompt}],
             )
+            print(f"[llm_fallback] DeepSeek call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
             return _extract_text(response), "deepseek"
         except Exception as e:
+            attempt_elapsed = time.monotonic() - _attempt_start
+            print(f"[llm_fallback] DeepSeek attempt {attempt + 1} failed after {attempt_elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
             if not _is_rate_limit_error(e) or attempt == _MAX_RATE_LIMIT_RETRIES:
                 raise
             last_error = e
-            time.sleep(_extract_retry_delay(e))
+            delay = _extract_retry_delay(e)
+            print(f"[llm_fallback] Rate limited, retrying in {delay:.1f}s...", flush=True)
+            time.sleep(delay)
 
     raise last_error

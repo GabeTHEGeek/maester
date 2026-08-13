@@ -128,10 +128,13 @@ archetypes (or a hybrid of two), based on signals in the JD:
 - AI Transformation/Enablement — "change management", "adoption", "enablement"
 
 State the detected archetype, then let it inform which of the candidate's own
-experience gets foregrounded: e.g. a Creator Product archetype should lead with
-the Twitch/community work; a Marketplace archetype should lead with the
-WarrantyPilot founder work; an Agentic/Automation archetype should lead with the
-AI agent projects (Karla, Rudy, Brand Companion Agent)."""
+experience gets foregrounded — e.g. a Creator Product archetype should lead
+with whatever community/engagement-facing work the resume actually shows; a
+Marketplace archetype should lead with whatever two-sided/marketplace
+experience is actually there; an Agentic/Automation archetype should lead
+with whatever AI/agent projects the resume names. Always drawn from the
+specific companies, projects, and roles in the source resume, never a
+generic placeholder or a project not actually present in it."""
 
 PROFILE = RoleProfile(
     id="product_manager",

@@ -11,12 +11,14 @@ from role_profiles.base import PanelPersona, RoleProfile
 from role_profiles.chief_of_staff import PROFILE as _CHIEF_OF_STAFF
 from role_profiles.customer_success import PROFILE as _CUSTOMER_SUCCESS
 from role_profiles.product_manager import PROFILE as _PRODUCT_MANAGER
+from role_profiles.software_engineer import PROFILE as _SOFTWARE_ENGINEER
 
 _PROFILES = {
     _PRODUCT_MANAGER.id: _PRODUCT_MANAGER,
     _CUSTOMER_SUCCESS.id: _CUSTOMER_SUCCESS,
     _ACCOUNT_EXECUTIVE.id: _ACCOUNT_EXECUTIVE,
     _CHIEF_OF_STAFF.id: _CHIEF_OF_STAFF,
+    _SOFTWARE_ENGINEER.id: _SOFTWARE_ENGINEER,
 }
 
 DEFAULT_PROFILE_ID = _PRODUCT_MANAGER.id

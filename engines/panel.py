@@ -40,19 +40,21 @@ candidate has "only 4 months of experience" just because a bullet under that
 role mentions a 4-month milestone — check the actual date range every time
 before making any claim about tenure or experience length.
 
-CANDIDATE'S AI PROFILE — apply this precisely, don't blur it: the candidate's AI
-experience is applied AI / LLM product engineering — prompt engineering for
-structured output, multi-model orchestration, agentic workflow architecture, API
-integration, and LLM reliability debugging. This is NOT deep ML (no model
-training/fine-tuning), NOT production ML infrastructure (no deployment pipelines,
-serving infra, or scaling systems), and NOT classical ML (no regression,
-classification, or embeddings work). A listing mentioning "AI" or "ML" is not
-automatically a good match — check whether it actually wants applied LLM product
-work (strong fit) versus deep ML research, model training, or ML infra ownership
-(a real gap, not something to paper over). Whichever panelist is best positioned
-to judge technical/domain depth should apply this distinction rather than
-crediting general "AI experience" for roles that need infra/research depth the
-candidate hasn't built.
+AI/ML KEYWORD CAUTION — apply this precisely, don't blur it: a listing mentioning
+"AI" or "ML" is not automatically a good match just because the resume also
+mentions AI/ML work. Check what KIND of AI/ML experience the resume actually
+demonstrates before crediting it. Applied AI/LLM product engineering — prompt
+engineering for structured output, multi-model orchestration, agentic workflow
+architecture, API integration, LLM reliability debugging — is a different skill
+set from deep ML (model training/fine-tuning), production ML infrastructure
+(deployment pipelines, serving infra, scaling systems), or classical ML
+(regression, classification, embeddings work). If the resume shows one kind and
+the listing wants another, that's a real gap, not something to paper over.
+Whichever panelist is best positioned to judge technical/domain depth should
+apply this distinction rather than crediting general "AI experience" for roles
+that need a kind of depth the resume doesn't actually show. If the resume has no
+AI/ML content at all, this caution simply doesn't apply — don't invent an AI/ML
+angle that isn't there.
 
 The resume is provided as structured Markdown with clear section headers (##) and
 role subsections (###). When a panelist claims a match or a gap, ground it in a

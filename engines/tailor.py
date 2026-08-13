@@ -37,18 +37,19 @@ HARD RULES — violating these is a serious failure:
 - If a JD requirement has no honest basis in the resume, do not paper over the
   gap with vague language designed to imply experience that isn't there.
 
-AI POSITIONING — apply this precisely: the candidate is an applied AI/LLM product
-builder — prompt engineering for structured output, multi-model orchestration
-(routing cheap/fast vs. careful/expensive models by task), agentic workflow
-architecture, API integration, and LLM reliability debugging (catching calibration
-failures, truncation/retry handling). Use this precise framing, not generic "AI
-Engineer" or "Machine Learning Engineer" language the resume can't back up. Never
-reframe this experience toward deep ML (model training/fine-tuning), ML
-infrastructure (deployment pipelines, serving, scaling), or classical ML
-(regression, classification, embeddings) — none of that is in the resume, and
-implying it in tailored language would be exactly the kind of misrepresentation
-the hard rules above forbid. If the JD wants that kind of depth, that's a real gap
-to leave visible, not word around.
+AI/ML POSITIONING — if the resume contains AI/ML work, describe it as precisely as
+the resume itself supports, never inflated to a kind of depth it doesn't show.
+Applied AI/LLM product engineering (prompt engineering for structured output,
+multi-model orchestration, agentic workflow architecture, API integration, LLM
+reliability debugging) is a different skill set from deep ML (model training/
+fine-tuning), ML infrastructure (deployment pipelines, serving, scaling), or
+classical ML (regression, classification, embeddings) — use whichever precise
+framing the resume actually backs up, not a generic "AI Engineer" or "Machine
+Learning Engineer" label the resume can't support. Never reframe applied LLM work
+toward deep ML/infra/classical-ML language, or vice versa — if the JD wants a kind
+of depth the resume doesn't show, that's a real gap to leave visible, not word
+around. If the resume has no AI/ML content at all, this section doesn't apply —
+never invent an AI/ML angle that isn't there.
 
 __ARCHETYPE_BLOCK__
 
@@ -244,34 +245,32 @@ FORMAT RULES (non-negotiable):
   doing its job.
 
 CONTENT: after the salutation, open with a concrete parallel between one of
-the candidate's own AI projects (from the AI Projects section of the resume:
-Karla, Rudy, Brand Companion Agent, Maester, or a project explicitly mentioned
-in additional context below) and what this specific role would have them
-build. Proof, not a claim. Only do this if a genuine, honest parallel exists;
-if none of the candidate's projects meaningfully connects to this role, open
-with the strongest resume-grounded hook instead, ideally the single most
-relevant metric from the resume, stated plainly and early rather than saved
-for later.
+the candidate's own projects (from a Projects section in the resume, or a
+project explicitly mentioned in additional context below) and what this
+specific role would have them build. Proof, not a claim. Only do this if a
+genuine, honest parallel exists in the actual source resume; if no named
+project meaningfully connects to this role, open with the strongest
+resume-grounded hook instead, ideally the single most relevant metric from
+the resume, stated plainly and early rather than saved for later.
 
 IF THE ROLE IS GENUINELY AI-FORWARD (the detected archetype is AI-native, or
 the JD itself emphasizes LLM/agent/AI product work as a core part of the
-job, not just a passing mention): lean into Maester specifically. It's the
-candidate's strongest, most differentiated proof point for exactly this kind
-of role, an actual shipped multi-agent system with real reliability
-engineering behind it, not a claimed skill. For a genuinely AI-forward role,
-this should be the opening parallel by default, not just a candidate for it,
-and it's also fair game as one of the 2-3 experience stories below, not only
-the opening line. For roles that are NOT genuinely AI-forward, stay
-conservative as before: only reach for it if the parallel is real, and don't
-force it in just to feature it.
+job, not just a passing mention) AND the resume contains a standout, real,
+shipped AI/LLM project: lean into that specific project by name rather than
+a generic AI-experience claim — a specific project with a real reliability
+or architecture story is a stronger, more differentiated proof point than a
+claimed skill. For a genuinely AI-forward role, if such a project exists in
+the resume, treat it as the default opening parallel, not just a candidate
+for it, and it's also fair game as one of the 2-3 experience stories below,
+not only the opening line. For roles that are NOT genuinely AI-forward, or
+when the resume has no such project, stay conservative: only reach for a
+project parallel if it's real and genuinely relevant, and don't force one in
+just to feature it.
 
 For the experience paragraph(s), pick 2-3 stories using the underlying shape
 of Situation, Task, Action, Result, and a real Metric (STAR-M) even though the
-letter shouldn't be literally labeled that way. These can be drawn from either
-the resume's work Experience section OR, for a genuinely AI-forward role,
-Maester itself (the keyword-overlap-vs-real-fit reliability story, the
-multi-provider fallback work, or the panel's disagreement-by-design
-architecture are all real, specific stories, not just a project description).
+letter shouldn't be literally labeled that way, drawn from the resume's own
+work Experience or Projects sections — never from outside the source resume.
 Quantify wherever the resume already has a number; don't describe a project
 in vague terms when the resume states a concrete result. Then make the "why
 them, why you" connection explicit: name a specific requirement or problem

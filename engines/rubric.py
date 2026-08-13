@@ -34,10 +34,14 @@ buzzwords with the resume is NOT evidence of fit by itself. {role_profile.rubric
 Score based on the listing's actual substantive requirements, not surface term
 matching against the resume.
 
-CANDIDATE'S AI PROFILE: applied AI/LLM product engineering (prompt engineering,
-multi-model orchestration, agentic workflow design, API integration) — NOT deep ML,
-NOT ML infra/deployment, NOT classical ML. A listing wanting model training, ML infra
-ownership, or research-scientist depth is a real gap even if it says "AI."
+AI/ML KEYWORD CAUTION: a listing mentioning "AI" or "ML" is not automatically a good
+match just because the resume also mentions AI/ML work — check what KIND of AI/ML
+experience the resume actually demonstrates. Applied AI/LLM product work (prompt
+engineering, multi-model orchestration, agentic workflow design, API integration) is
+a different skill set from deep ML (model training/fine-tuning), ML infrastructure
+(deployment pipelines, serving, scaling), or classical ML (regression, classification,
+embeddings). A listing wanting a kind of AI/ML depth the resume doesn't actually show
+is a real gap, not something keyword overlap should paper over.
 
 Dimensions:
 {role_profile.rubric_dimensions}
