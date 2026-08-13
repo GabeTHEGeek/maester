@@ -277,6 +277,34 @@ def _try_topic_answer(page, raw_entry: dict, locator, topic) -> tuple:
 # the user mid-review.
 _LIVE_SESSIONS = {}
 
+# One shared Playwright browser + context for the whole process, not a fresh
+# `chromium.launch()` per listing. Confirmed directly this matters: launching
+# a brand-new Chromium process every time opens a brand-new OS window every
+# time, so auto-filling a handful of listings in one session left that many
+# separate windows piling up. Multiple context.new_page() calls on the SAME
+# context open as tabs in one window instead - this module now launches once
+# and reuses that browser/context for every subsequent listing.
+_shared_playwright = None
+_shared_browser = None
+_shared_context = None
+
+
+def _get_shared_context():
+    """Returns the shared (playwright, browser, context) triple, launching it
+    on first use and relaunching if the user closed the window themselves
+    (browser.is_connected() goes False) rather than erroring on a dead
+    browser reference."""
+    global _shared_playwright, _shared_browser, _shared_context
+    if _shared_browser is not None and not _shared_browser.is_connected():
+        _shared_playwright = None
+        _shared_browser = None
+        _shared_context = None
+    if _shared_context is None:
+        _shared_playwright = sync_playwright().start()
+        _shared_browser = _shared_playwright.chromium.launch(headless=False)
+        _shared_context = _shared_browser.new_context(viewport={"width": 1600, "height": 1000})
+    return _shared_playwright, _shared_browser, _shared_context
+
 
 class FillResult:
     def __init__(self, status, reason="", fields_auto_mapped=None, fields_flagged=None, reveal_clicked=False):
@@ -319,9 +347,7 @@ def _discover_and_map(url, api_key, deepseek_api_key, session_key=None):
 
     adapter = get_adapter(url)
 
-    playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=False)
-    context = browser.new_context(viewport={"width": 1600, "height": 1000})
+    playwright, browser, context = _get_shared_context()
     pw_page = context.new_page()
     pw_page.goto(url, wait_until="domcontentloaded")
     # Many career pages (Cribl's included) client-render their real content,
@@ -448,12 +474,15 @@ def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
                 "category": category,
             })
 
-    # Scanning is preview-only - always close the browser it opened, unlike
-    # open_and_fill which deliberately leaves it open for review.
+    # Scanning is preview-only - always close the tab it opened, unlike
+    # open_and_fill which deliberately leaves it open for review. Closes
+    # just this page now, not the whole browser/playwright driver - those
+    # are shared across every listing (see _get_shared_context), so tearing
+    # them down here would also kill any other tab currently open for
+    # review from a prior open_and_fill call.
     if discovery.page is not None:
         try:
-            discovery.browser.close()
-            discovery.playwright.stop()
+            discovery.page.close()
         except Exception:
             pass
         _LIVE_SESSIONS.pop(f"scan-{session_key or url}", None)
