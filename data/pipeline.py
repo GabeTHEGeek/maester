@@ -28,6 +28,8 @@ FIELDS = [
     "date_added",
     "status_updated_at",
     "date_applied",
+    "date_interviewing",
+    "date_offer",
     "notes",
 ]
 
@@ -72,9 +74,22 @@ def ensure_pipeline():
                 row.setdefault(field, "")
             # Best-effort backfill: status_updated_at is the closest proxy
             # for "when this job reached its current status" on rows that
-            # predate date_applied.
+            # predate date_applied/date_interviewing/date_offer. These are
+            # all "high-water mark" fields - set once, the first time a job
+            # reaches that stage, and never cleared afterward even if the
+            # status later moves on (e.g. to Rejected) - so metrics built on
+            # them don't drop when a status change looks like "less
+            # progress" than it actually represents. A row that's currently
+            # Rejected but predates these fields has no recoverable history
+            # of whether it ever reached Interviewing/Offer - nothing to
+            # backfill there beyond its current status, same limitation as
+            # date_applied always had for pre-existing Rejected rows.
             if not row.get("date_applied") and row.get("status") in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
                 row["date_applied"] = row.get("status_updated_at") or ""
+            if not row.get("date_interviewing") and row.get("status") in ("Interviewing", "Offer"):
+                row["date_interviewing"] = row.get("status_updated_at") or ""
+            if not row.get("date_offer") and row.get("status") == "Offer":
+                row["date_offer"] = row.get("status_updated_at") or ""
             # Best-effort backfill for recruiter_contact on rows that predate
             # it: reaching Interviewing/Offer necessarily means a real human
             # reached out, so that much can be inferred safely. A bare
@@ -137,6 +152,8 @@ def add_or_update(url: str, company: str, role_title: str, snapshot_score: str, 
             "date_added": now,
             "status_updated_at": now,
             "date_applied": now if status == "Applied" else "",
+            "date_interviewing": "",
+            "date_offer": "",
             "notes": "",
         }
     )

@@ -1434,29 +1434,33 @@ with tab_tracking:
     tracked_count = len(pipeline_rows)
     status_counts = Counter(r.get("status") or DEFAULT_STATUS for r in pipeline_rows)
 
-    applied_active = status_counts.get("Applied", 0) + status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0)
-    interviewing_total = status_counts.get("Interviewing", 0) + status_counts.get("Offer", 0)
-    offer_total = status_counts.get("Offer", 0)
-    # Denominator for response rate is broader than the funnel's "Applied"
-    # tile on purpose: everyone who ever reached Applied or further —
-    # including Rejected/Withdrawn, since they applied too, they just also
-    # exited. The funnel's "Applied" excludes those as exits, not progress;
-    # this metric is asking a different question ("of everyone I applied
-    # to, how many responded"), so it needs the full denominator.
-    applied_ever = applied_active + status_counts.get("Rejected", 0) + status_counts.get("Withdrawn", 0)
-    # A response means an actual human reached out - Interviewing/Offer
-    # always qualify (can't reach those without contact). A bare "Rejected"
-    # does NOT count on its own - most rejections are silent ATS
-    # auto-rejects nobody ever read, not a real response. Only counts if
-    # recruiter_contact is explicitly flagged "Yes" on that row. Withdrawn
-    # doesn't count by itself either, since that's user-initiated and may
-    # happen before or after any real contact.
-    contacted_rejected = sum(
+    # "Ever reached" counts, built from the high-water-mark date fields
+    # (set once, never cleared - see the Save handler below), not from
+    # CURRENT status. This is the fix for a real, reported bug: the old
+    # version summed status_counts.get("Applied") etc., so moving a job
+    # from Applied straight to Rejected made it vanish from the Applied
+    # count entirely - the tile visibly dropped, and the same problem hit
+    # Interviewing whenever an interviewed candidate was later rejected,
+    # which corrupted the interview-rate percentage too. A job that ever
+    # reached a stage stays counted in it permanently, regardless of where
+    # it ends up.
+    applied_ever_count = sum(1 for r in pipeline_rows if r.get("date_applied"))
+    interviewing_ever_count = sum(1 for r in pipeline_rows if r.get("date_interviewing"))
+    offer_ever_count = sum(1 for r in pipeline_rows if r.get("date_offer"))
+    # A response means an actual human reached out - ever reaching
+    # Interviewing/Offer always qualifies (can't reach those without
+    # contact). A bare "Rejected" does NOT count on its own - most
+    # rejections are silent ATS auto-rejects nobody ever read - only counts
+    # if recruiter_contact is explicitly flagged "Yes" AND it was rejected
+    # without ever reaching Interviewing (otherwise it's already counted via
+    # interviewing_ever_count, and counting it again here would double-count
+    # the same job in the response-rate numerator).
+    contacted_rejected_no_interview = sum(
         1 for r in pipeline_rows
-        if r.get("status") == "Rejected" and r.get("recruiter_contact") == "Yes"
+        if r.get("status") == "Rejected" and r.get("recruiter_contact") == "Yes" and not r.get("date_interviewing")
     )
-    responded_total = interviewing_total + contacted_rejected
-    response_rate = (responded_total / applied_ever * 100) if applied_ever else 0.0
+    responded_total = interviewing_ever_count + contacted_rejected_no_interview
+    response_rate = (responded_total / applied_ever_count * 100) if applied_ever_count else 0.0
 
     st.markdown("#### Overview")
     # Two rows, grouped by what the numbers actually mean, rather than one
@@ -1473,10 +1477,10 @@ with tab_tracking:
     activity_cols[2].metric("Tracked", tracked_count)
 
     pipeline_cols = st.columns(4)
-    pipeline_cols[0].metric("Applied", applied_active)
-    pipeline_cols[1].metric("Interviewing", interviewing_total)
-    pipeline_cols[2].metric("Offers", offer_total)
-    pipeline_cols[3].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
+    pipeline_cols[0].metric("Applied", applied_ever_count)
+    pipeline_cols[1].metric("Interviewing", interviewing_ever_count)
+    pipeline_cols[2].metric("Offers", offer_ever_count)
+    pipeline_cols[3].metric("Response rate", f"{response_rate:.0f}%" if applied_ever_count else "—")
 
     if not pipeline_rows:
         st.info(
@@ -1488,20 +1492,20 @@ with tab_tracking:
         st.caption(
             "Scored/Deep dived/Tracked are independent activity counts, not strictly nested (a "
             "listing can be tracked straight from a search result without a deep dive, or deep-dived "
-            "via a pasted URL without a prior search). Applied/Interviewing/Offer assume the normal "
-            "happy-path progression through those statuses — e.g. \"Interviewing\" includes jobs "
-            "currently at \"Offer\" too, since reaching Offer implies having interviewed. Rejected/"
-            "Withdrawn are excluded here as exits, not further progress — see the status breakdown "
-            "below for those."
+            "via a pasted URL without a prior search). Applied/Interviewing/Offer count every job "
+            "that EVER reached that stage, not just ones currently sitting there — e.g. a job you "
+            "interviewed for and were later rejected from still counts under \"Interviewing,\" it "
+            "doesn't disappear from the funnel just because it since moved on. See the status "
+            "breakdown below for where things currently stand."
         )
         funnel_stages = ["Scored", "Deep dived", "Tracked", "Applied", "Interviewing", "Offer"]
         funnel_values = [
             scored_count,
             deep_dive_count,
             tracked_count,
-            applied_active,
-            interviewing_total,
-            offer_total,
+            applied_ever_count,
+            interviewing_ever_count,
+            offer_ever_count,
         ]
         funnel_fig = go.Figure(
             go.Funnel(
@@ -1574,16 +1578,18 @@ with tab_tracking:
         st.markdown("#### Conversion rates")
         st.caption(
             "Percentages of everyone who ever reached \"Applied\" or further, including Rejected/"
-            "Withdrawn. Response rate counts Interviewing/Offer plus any Rejected row flagged "
-            "\"Recruiter contact: Yes\" below - a bare Rejected doesn't count on its own, since most "
-            "rejections are silent ATS auto-rejects nobody ever read."
+            "Withdrawn - these track EVER reaching a stage, not current status, so rejecting a job "
+            "you interviewed for doesn't drop it out of the interview rate. Response rate counts "
+            "everyone who ever reached Interviewing, plus any Rejected-without-interviewing row "
+            "flagged \"Recruiter contact: Yes\" below - a bare Rejected doesn't count on its own, "
+            "since most rejections are silent ATS auto-rejects nobody ever read."
         )
         rate_cols = st.columns(4)
-        rate_cols[0].metric("Response rate", f"{response_rate:.0f}%" if applied_ever else "—")
-        rate_cols[1].metric("Interview rate", f"{interviewing_total / applied_ever * 100:.0f}%" if applied_ever else "—")
-        rate_cols[2].metric("Offer rate", f"{offer_total / applied_ever * 100:.0f}%" if applied_ever else "—")
-        rejected_rate = (status_counts.get("Rejected", 0) / applied_ever * 100) if applied_ever else 0.0
-        rate_cols[3].metric("Rejection rate", f"{rejected_rate:.0f}%" if applied_ever else "—")
+        rate_cols[0].metric("Response rate", f"{response_rate:.0f}%" if applied_ever_count else "—")
+        rate_cols[1].metric("Interview rate", f"{interviewing_ever_count / applied_ever_count * 100:.0f}%" if applied_ever_count else "—")
+        rate_cols[2].metric("Offer rate", f"{offer_ever_count / applied_ever_count * 100:.0f}%" if applied_ever_count else "—")
+        rejected_rate = (status_counts.get("Rejected", 0) / applied_ever_count * 100) if applied_ever_count else 0.0
+        rate_cols[3].metric("Rejection rate", f"{rejected_rate:.0f}%" if applied_ever_count else "—")
 
         st.markdown("#### Tracked applications")
         st.caption(
@@ -1603,6 +1609,8 @@ with tab_tracking:
                 "snapshot_score": st.column_config.TextColumn("Score (at time tracked)", disabled=True),
                 "date_added": st.column_config.TextColumn(disabled=True),
                 "date_applied": st.column_config.TextColumn("Applied on", disabled=True),
+                "date_interviewing": st.column_config.TextColumn("Interviewing since", disabled=True),
+                "date_offer": st.column_config.TextColumn("Offer since", disabled=True),
             },
             key="pipeline_editor",
         )
@@ -1620,13 +1628,26 @@ with tab_tracking:
                 status_updated_at = r.get("status_updated_at") or now
                 if existing is not None and existing_status != status:
                     status_updated_at = now
-                # date_applied is set once, the first time status reaches
-                # Applied or further, and never overwritten after — that's
-                # what makes it usable for "applied by day" outreach
-                # tracking even after the job later moves to Interviewing.
+                # date_applied/date_interviewing/date_offer are each set
+                # once, the first time status reaches that stage or further,
+                # and never overwritten after - "high-water mark" fields,
+                # not a snapshot of current status. This is what makes
+                # metrics built on them (Overview's Applied/Interviewing/
+                # Offer tiles, the funnel, interview/offer rate) stay stable
+                # instead of dropping when a job later moves to Rejected -
+                # confirmed directly this was a real bug: moving a job from
+                # Applied to Rejected silently decremented the Applied
+                # count, because that tile used to count CURRENT status
+                # only, not "ever reached."
                 date_applied = (existing.get("date_applied") if existing else "") or r.get("date_applied") or ""
                 if not date_applied and status in ("Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"):
                     date_applied = now
+                date_interviewing = (existing.get("date_interviewing") if existing else "") or r.get("date_interviewing") or ""
+                if not date_interviewing and status in ("Interviewing", "Offer"):
+                    date_interviewing = now
+                date_offer = (existing.get("date_offer") if existing else "") or r.get("date_offer") or ""
+                if not date_offer and status == "Offer":
+                    date_offer = now
                 # Reaching Interviewing/Offer necessarily means a real human
                 # reached out, so force this to Yes regardless of what's in
                 # the editor - the user shouldn't have to remember to flip it
@@ -1642,6 +1663,8 @@ with tab_tracking:
                     "date_added": r.get("date_added") or now,
                     "status_updated_at": status_updated_at,
                     "date_applied": date_applied,
+                    "date_interviewing": date_interviewing,
+                    "date_offer": date_offer,
                     "notes": r.get("notes") or "",
                 })
             save_pipeline(sanitized_rows)
