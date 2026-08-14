@@ -37,13 +37,76 @@ wastes the same time this whole tool exists to save.
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; PanelFitBot/0.1; +https://github.com/)"
 }
+
+# A real desktop Chrome UA, used only for the render fallback below - some
+# client-rendered career sites (confirmed: Medallia's Jibe/iCIMS-powered
+# site) return a flat 403 to the generic bot UA above, but load normally for
+# something that looks like an actual browser.
+_REALISTIC_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+# All Playwright work for this module's render fallback runs on one
+# dedicated background thread, same reasoning and same pattern as
+# browser/autofill.py's _executor: Playwright's sync API is thread-bound to
+# whichever OS thread created it, and Streamlit runs each script rerun on a
+# fresh thread, so touching a Playwright object from the caller's (ever-
+# changing) thread directly crashes on the second use. This is a SEPARATE
+# executor/browser from autofill.py's - that one is deliberately visible
+# (headless=False) for manual review; this one is headless and silent,
+# purely for reading text, and popping a visible window open every time
+# someone pastes a URL to score would be a jarring, unwanted surprise.
+_render_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="maester-fetch-render")
+_render_playwright = None
+_render_browser = None
+
+
+def _get_render_browser():
+    global _render_playwright, _render_browser
+    if _render_browser is not None and not _render_browser.is_connected():
+        _render_playwright = None
+        _render_browser = None
+    if _render_browser is None:
+        _render_playwright = sync_playwright().start()
+        _render_browser = _render_playwright.chromium.launch(headless=True)
+    return _render_browser
+
+
+def _render_text_job(url: str, timeout_ms: int) -> str:
+    browser = _get_render_browser()
+    context = browser.new_context(viewport={"width": 1600, "height": 1000}, user_agent=_REALISTIC_USER_AGENT)
+    try:
+        page = context.new_page()
+        page.goto(url, wait_until="load", timeout=timeout_ms)
+        page.wait_for_timeout(2000)
+        text = page.inner_text("body")
+    finally:
+        context.close()
+    return text
+
+
+def fetch_rendered_text(url: str, timeout_ms: int = 20000) -> str:
+    """Renders the page with a real (headless) browser and a realistic
+    desktop User-Agent, then reads the DOM's actual text - the fallback for
+    client-rendered career pages a plain requests+BeautifulSoup fetch can't
+    see. Confirmed directly against a real listing: Medallia's Jibe/iCIMS-
+    powered career site returns only nav/footer/EEO-legal boilerplate to a
+    static scrape (real job description included), and 403s the generic bot
+    User-Agent outright. Thin wrapper: submits to _render_executor so every
+    Playwright object this touches stays on one dedicated thread for the
+    life of the process (see the comment above _get_render_browser)."""
+    return _render_executor.submit(_render_text_job, url, timeout_ms).result()
+
 
 _EXPIRED_PHRASES = [
     "no longer accepting applications",
@@ -92,6 +155,32 @@ def _extract_page_title(soup: BeautifulSoup) -> str:
     return _TITLE_SUFFIX_RE.sub("", raw).strip() or raw
 
 
+# Real job descriptions overwhelmingly use at least one of these, regardless
+# of ATS platform or exact template wording - if NONE of them appear
+# anywhere in a scrape, that's a strong signal the page is nav/footer/EEO-
+# legal boilerplate, not a real posting, even when the raw character count
+# clears _THIN_CONTENT_THRESHOLD (confirmed directly: Medallia's scrape came
+# back at 2198 chars, well above the threshold, but every one of those
+# characters was "Skip to Main Content" / "Equal Opportunity Employer" /
+# "Accessibility Statement" boilerplate - a length-only check missed it).
+_JD_SIGNAL_PHRASES = [
+    "responsibilit", "requirement", "qualification", "what you'll do",
+    "who you are", "about the role", "about this role",
+    "we are seeking", "years of experience",
+]
+
+# Real JDs run long - a genuine short one that happens to avoid all the
+# signal phrases above is a plausible false positive, but a LONG page that
+# still trips zero of them essentially never is, so the render fallback
+# below only fires under this length too, not unconditionally.
+_BOILERPLATE_LENGTH_CAP = 4000
+
+
+def _looks_like_real_job_description(text: str) -> bool:
+    lower = text.lower()
+    return any(phrase in lower for phrase in _JD_SIGNAL_PHRASES)
+
+
 def fetch_job_page(url: str, timeout: int = 10) -> dict:
     """Fetches and cleans a job page, returning the text, the final URL
     after redirects (needed for liveness checking - e.g. Greenhouse
@@ -117,6 +206,22 @@ def fetch_job_page(url: str, timeout: int = 10) -> dict:
 
     if len(cleaned) < _THIN_CONTENT_THRESHOLD and len(meta_description) > len(cleaned):
         cleaned = meta_description
+
+    # Static scrape came back boilerplate-only (nav/footer/EEO-legal text,
+    # no real job content) - a genuinely client-rendered page a plain
+    # requests+BeautifulSoup fetch can never see correctly, regardless of
+    # length. Try a real (headless) browser render instead; if THAT also
+    # fails or comes back short, keep the static scrape rather than lose it
+    # entirely - a partial/wrong-looking result beats a hard failure here.
+    if len(cleaned) < _BOILERPLATE_LENGTH_CAP and not _looks_like_real_job_description(cleaned):
+        try:
+            rendered = fetch_rendered_text(url)
+            rendered_lines = [line.strip() for line in rendered.splitlines()]
+            rendered_cleaned = "\n".join(line for line in rendered_lines if line)
+            if len(rendered_cleaned) > len(cleaned):
+                cleaned = rendered_cleaned
+        except Exception:
+            pass
 
     # Generous cap now that forms (the biggest source of bloat) are stripped —
     # this is a safety margin, not the primary defense against noise.
