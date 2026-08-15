@@ -165,6 +165,41 @@ def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_a
     return result, job_text, liveness
 
 
+def _sanitize_filename_part(text: str) -> str:
+    # Collapses any run of non-alphanumeric characters (including a JD
+    # title's own dashes/commas, e.g. "Ads - Shopping Catalogs") into a
+    # single underscore, rather than keeping dashes literally - otherwise
+    # "Ads - Shopping" becomes the distinctly non-professional-looking
+    # "Ads_-_Shopping" instead of "Ads_Shopping".
+    return re.sub(r"[^\w]+", "_", (text or "").strip()).strip("_")
+
+
+def _build_application_filename(role_title: str, candidate_name: str, company: str, doc_type: str) -> str:
+    """Builds the filename an application's tailored resume/cover letter is
+    saved and uploaded under - <Role>_<First>_<Last>_<Company>_<Date>_<DocType>.pdf.
+    This is not just a cosmetic download-button label: Playwright's
+    set_input_files uses the local file's own basename as the uploaded
+    file's name, so whatever this function returns is literally the
+    filename an employer's ATS sees on upload. Confirmed directly this
+    mattered - the batch flow's own filenames (a "batch_" prefix plus a raw
+    job id) would have uploaded as something like
+    "batch_resume_reddit_18f8a5d2ea01cdb.pdf", which reads as tooling
+    output, not a candidate's own file. No "batch", no numeric ids, ever -
+    same naming scheme regardless of whether this came from the single-job
+    flow or a batch run."""
+    first, _, rest = (candidate_name or "").strip().partition(" ")
+    last = rest.strip().rsplit(" ", 1)[-1] if rest.strip() else ""
+    parts = [
+        _sanitize_filename_part(role_title) or "Role",
+        _sanitize_filename_part(first),
+        _sanitize_filename_part(last),
+        _sanitize_filename_part(company) or "Company",
+        datetime.now().strftime("%Y-%m-%d"),
+        doc_type,
+    ]
+    return "_".join(p for p in parts if p) + ".pdf"
+
+
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
 if "jobs_by_id" not in st.session_state:
@@ -1301,13 +1336,15 @@ with tab_deep_dive:
             if st.button("Render PDFs"):
                 with st.spinner("Rendering PDFs..."):
                     try:
-                        safe_company = re.sub(r"[^\w\-]+", "_", result.company or "company")
-                        resume_pdf_path = os.path.join(
-                            tempfile.gettempdir(), f"resume_{safe_company}.pdf"
+                        candidate_name = materials.get("candidate_name", "")
+                        resume_filename = _build_application_filename(
+                            result.role_title, candidate_name, result.company, "Resume"
                         )
-                        cover_pdf_path = os.path.join(
-                            tempfile.gettempdir(), f"cover_letter_{safe_company}.pdf"
+                        cover_filename = _build_application_filename(
+                            result.role_title, candidate_name, result.company, "CoverLetter"
                         )
+                        resume_pdf_path = os.path.join(tempfile.gettempdir(), resume_filename)
+                        cover_pdf_path = os.path.join(tempfile.gettempdir(), cover_filename)
                         render_resume_pdf(
                             materials["tailored_resume_markdown"],
                             resume_pdf_path,
@@ -1332,14 +1369,14 @@ with tab_deep_dive:
                             st.download_button(
                                 "Download tailored resume (PDF)",
                                 f.read(),
-                                file_name=f"resume_{safe_company}.pdf",
+                                file_name=resume_filename,
                                 mime="application/pdf",
                             )
                         with open(cover_pdf_path, "rb") as f:
                             st.download_button(
                                 "Download cover letter (PDF)",
                                 f.read(),
-                                file_name=f"cover_letter_{safe_company}.pdf",
+                                file_name=cover_filename,
                                 mime="application/pdf",
                             )
 
@@ -1550,12 +1587,14 @@ with tab_batch:
                                 role_profile=get_profile(result.role_profile),
                             )
 
-                            safe_company = re.sub(r"[^\w\-]+", "_", result.company or "company")
+                            candidate_name = materials.get("candidate_name", "")
                             resume_pdf_path = os.path.join(
-                                tempfile.gettempdir(), f"batch_resume_{safe_company}_{jid}.pdf"
+                                tempfile.gettempdir(),
+                                _build_application_filename(result.role_title, candidate_name, result.company, "Resume"),
                             )
                             cover_pdf_path = os.path.join(
-                                tempfile.gettempdir(), f"batch_cover_{safe_company}_{jid}.pdf"
+                                tempfile.gettempdir(),
+                                _build_application_filename(result.role_title, candidate_name, result.company, "CoverLetter"),
                             )
                             render_resume_pdf(
                                 materials["tailored_resume_markdown"],
