@@ -10,6 +10,7 @@ import os
 import re
 import tempfile
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -103,12 +104,79 @@ def _fetch_listing_by_url(url: str, token: str, source: str) -> dict:
     return None
 
 
+def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_api_key: str, role_profile) -> tuple:
+    """Fetches a listing's real text (falling back to a live fetch if the
+    search result didn't already have a description, then a second live
+    fetch if that still turned up no salary) and runs the full panel
+    against it. Shared by the single-job Deep Dive flow and batch
+    processing so both go through the exact same fetch/salary-recovery/
+    panel-call sequence - one fix to either applies to both instead of two
+    copies quietly drifting apart. Returns (result, job_text, liveness) on
+    success; raises on failure like the pieces it calls do - the single-job
+    caller shows st.error, the batch caller records it per-job and keeps
+    going rather than aborting the whole run."""
+    liveness = None
+    if job.get("description"):
+        job_text = job["description"]
+    else:
+        page = fetch_job_page(job["url"])
+        job_text = page["text"]
+        liveness = check_liveness(job_text, page["final_url"])
+
+    # Manually pasted URLs never go through job_source's extraction, so
+    # always try extracting from the actual text we're about to hand the
+    # panel, and only fall back to whatever the search result already had
+    # if that fails.
+    salary = extract_salary(job_text) or job.get("salary", "")
+
+    # Some ATSes (Greenhouse in particular) render the salary line via
+    # their own compliance template rather than the employer-authored
+    # description the API returns, so it can be genuinely absent from a
+    # cached search result's description even though it's visible on the
+    # live page. If we still don't have a salary and this came from a
+    # search result (not a fresh fetch already), try the live page once -
+    # and replace job_text itself with the fuller live version, not just
+    # the extracted salary string, so the panel's own Comp Reliability
+    # reasoning sees the same salary text the regex found.
+    if not salary and job.get("url") and job.get("description"):
+        try:
+            live_text = fetch_job_text(job["url"])
+            live_salary = extract_salary(live_text)
+            if live_salary:
+                salary = live_salary
+                job_text = live_text
+        except Exception:
+            pass
+
+    result = run_panel(
+        resume_text=resume_text,
+        job_text=job_text,
+        company=job.get("company") or "Unknown",
+        role_title=job.get("title") or "Unknown role",
+        api_key=api_key,
+        job_url=job.get("url", ""),
+        source=job.get("source", "unknown"),
+        board=job.get("board", "unknown"),
+        location=job.get("location", ""),
+        salary=salary,
+        deepseek_api_key=deepseek_api_key,
+        role_profile=role_profile,
+    )
+    return result, job_text, liveness
+
+
 if "search_results" not in st.session_state:
     st.session_state.search_results = []
 if "jobs_by_id" not in st.session_state:
     st.session_state.jobs_by_id = {}
 if "deep_dive_job" not in st.session_state:
     st.session_state.deep_dive_job = None
+if "batch_deep_dive_results" not in st.session_state:
+    st.session_state.batch_deep_dive_results = {}
+if "batch_deep_dive_errors" not in st.session_state:
+    st.session_state.batch_deep_dive_errors = {}
+if "batch_apply_log" not in st.session_state:
+    st.session_state.batch_apply_log = []
 
 st.title("\U0001F56F Maester")
 st.caption(
@@ -187,11 +255,11 @@ with st.sidebar:
             smtp_port = st.number_input("Port", value=587, key="smtp_port")
         auto_email = st.checkbox("Automatically email me a summary after each Deep Dive run", value=False)
 
-tab_search, tab_deep_dive, tab_dashboard, tab_tracking, tab_setup = st.tabs(
-    ["Search & Score", "Deep Dive", "Dashboard", "Tracking", "Setup"]
+tab_search, tab_deep_dive, tab_batch, tab_dashboard, tab_tracking, tab_setup = st.tabs(
+    ["Search & Score", "Deep Dive", "Batch", "Dashboard", "Tracking", "Setup"]
 )
 
-# TAB 5: Setup — resume, plus onboarding checklist and in-app editors for
+# TAB 6: Setup — resume, plus onboarding checklist and in-app editors for
 # the two files that used to be hand-edit-JSON-only (profile.json,
 # answer_bank.json). Physically placed here, right after st.tabs(), even
 # though "Setup" is the LAST tab visually - Streamlit tab position is
@@ -886,7 +954,8 @@ with tab_search:
         st.markdown(f"### {len(st.session_state.search_results)} listings ranked")
         st.caption(
             "These are a fast first-pass triage, not a verdict — titles can be misleading. "
-            "Always run Deep Dive before trusting a high score."
+            "Always run Deep Dive before trusting a high score. Check a few boxes below to "
+            "process them together on the **Batch** tab (deep dive + tailor + auto-fill)."
         )
         for r in st.session_state.search_results:
             grade_color = {
@@ -897,7 +966,9 @@ with tab_search:
                 "F": "red",
             }.get(r.grade, "gray")
             with st.container(border=True):
-                c1, c2, c3, c4, c5 = st.columns([3, 1, 1, 1, 1])
+                c0, c1, c2, c3, c4, c5 = st.columns([0.4, 2.6, 1, 1, 1, 1])
+                with c0:
+                    st.checkbox("Select for batch", key=f"batch_select_{r.job_id}", label_visibility="collapsed")
                 with c1:
                     if r.source == "greenhouse":
                         source_label = f"Greenhouse · {r.board}"
@@ -953,6 +1024,22 @@ with tab_search:
                             snapshot_score=f"{r.grade} ({r.score:.1f}/5.0)",
                         )
                         st.rerun()
+
+        # Derived fresh every rerun from the checkboxes' own widget state,
+        # not a separately-maintained set - a checkbox's key IS the source
+        # of truth, so there's no separate list that can drift out of sync
+        # with what's actually checked (e.g. after a new search replaces
+        # search_results, a stale id here would silently point at a job
+        # that's no longer on screen).
+        st.session_state.batch_selected_ids = [
+            r.job_id for r in st.session_state.search_results
+            if st.session_state.get(f"batch_select_{r.job_id}")
+        ]
+        if st.session_state.batch_selected_ids:
+            st.info(
+                f"{len(st.session_state.batch_selected_ids)} selected for batch processing — "
+                "head to the **Batch** tab to run Deep Dive and auto-fill on all of them."
+            )
 
 # ---------------------------------------------------------------------------
 # TAB 2: Deep Dive — full 5-panelist evaluation on a selected listing.
@@ -1029,53 +1116,8 @@ with tab_deep_dive:
         else:
             with st.spinner("Fetching listing and convening the panel..."):
                 try:
-                    liveness = None
-                    if target_job.get("description"):
-                        job_text = target_job["description"]
-                    else:
-                        page = fetch_job_page(target_job["url"])
-                        job_text = page["text"]
-                        liveness = check_liveness(job_text, page["final_url"])
-
-                    # Manually pasted URLs never go through job_source's extraction,
-                    # so always try extracting from the actual text we're about to
-                    # hand the panel, and only fall back to whatever the search result
-                    # already had if that fails.
-                    salary = extract_salary(job_text) or target_job.get("salary", "")
-
-                    # Some ATSes (Greenhouse in particular) render the salary line via
-                    # their own compliance template rather than the employer-authored
-                    # description the API returns, so it can be genuinely absent from
-                    # a cached search result's description even though it's visible on
-                    # the live page. If we still don't have a salary and this came from
-                    # a search result (not a fresh fetch already), try the live page once —
-                    # and replace job_text itself with the fuller live version, not just
-                    # the extracted salary string, so the panel's own Comp Reliability
-                    # reasoning sees the same salary text the regex found, instead of the
-                    # two disagreeing because only one of them got the live page's content.
-                    if not salary and target_job.get("url") and target_job.get("description"):
-                        try:
-                            live_text = fetch_job_text(target_job["url"])
-                            live_salary = extract_salary(live_text)
-                            if live_salary:
-                                salary = live_salary
-                                job_text = live_text
-                        except Exception:
-                            pass
-
-                    result = run_panel(
-                        resume_text=resume_text,
-                        job_text=job_text,
-                        company=target_job.get("company") or "Unknown",
-                        role_title=target_job.get("title") or "Unknown role",
-                        api_key=api_key,
-                        job_url=target_job.get("url", ""),
-                        source=target_job.get("source", "unknown"),
-                        board=target_job.get("board", "unknown"),
-                        location=target_job.get("location", ""),
-                        salary=salary,
-                        deepseek_api_key=deepseek_api_key,
-                        role_profile=active_profile,
+                    result, job_text, liveness = _run_deep_dive_for_job(
+                        target_job, resume_text, api_key, deepseek_api_key, active_profile
                     )
                     log_result(result)
                     # Persisted so the tailoring button below survives the rerun
@@ -1364,7 +1406,234 @@ with tab_deep_dive:
                             st.warning("Needs your attention: " + ", ".join(fill_result.fields_flagged))
 
 # ---------------------------------------------------------------------------
-# TAB 3: Dashboard — everything you've deep-dived on, logged locally.
+# TAB 3: Batch — run Deep Dive, tailoring, and Auto-Fill across several
+# listings selected on Search & Score in one pass, instead of repeating the
+# single-job flow by hand for each one. Deep Dive calls run concurrently
+# (cheap - just LLM calls, same ThreadPoolExecutor pattern engines/rubric.py
+# already uses for quick-scan batching); Auto-Fill runs strictly one listing
+# at a time - browser/autofill.py already serializes all Playwright work
+# onto a single dedicated thread (see its own module docstring for why), so
+# that wasn't a choice to make here, just a consequence of that constraint.
+# Every hard rule from the single-job flow still applies unchanged: this
+# never clicks submit, on any listing, ever - "batch apply" means "batch
+# fill and leave each one open for your own review," not "batch submit."
+# ---------------------------------------------------------------------------
+with tab_batch:
+    st.subheader("Batch: Deep Dive + Tailor + Auto-Fill")
+    st.caption(
+        "Select listings on the Search & Score tab, then run them through Deep Dive, tailoring, "
+        "and Auto-Fill together here. Nothing ever gets submitted automatically — each listing "
+        "still opens as its own tab, filled in and left for you to review and submit yourself."
+    )
+
+    selected_ids = st.session_state.get("batch_selected_ids", [])
+    selected_jobs = [
+        st.session_state.jobs_by_id[jid] for jid in selected_ids if jid in st.session_state.jobs_by_id
+    ]
+
+    if not selected_jobs:
+        st.info(
+            "Nothing selected yet — check a few boxes on the **Search & Score** results, then "
+            "come back here."
+        )
+    else:
+        st.markdown(f"**{len(selected_jobs)} selected:**")
+        for j in selected_jobs:
+            st.write(f"- {j.get('title') or 'Unknown role'} at {j.get('company') or 'Unknown'}")
+
+        if st.button("Run Deep Dive on all selected", type="primary"):
+            if not api_key:
+                st.error("Add your Anthropic API key in the sidebar first.")
+            elif not resume_text.strip():
+                st.error("Add a resume first.")
+            else:
+                progress_area = st.status(f"Running Deep Dive on {len(selected_jobs)} listings...", expanded=True)
+                batch_results = {}
+                batch_errors = {}
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {
+                        executor.submit(
+                            _run_deep_dive_for_job, job, resume_text, api_key, deepseek_api_key, active_profile
+                        ): job
+                        for job in selected_jobs
+                    }
+                    for future in as_completed(futures):
+                        job = futures[future]
+                        job_id = str(job.get("id", job["url"]))
+                        try:
+                            result, job_text, liveness = future.result()
+                            log_result(result)
+                            batch_results[job_id] = {"result": result, "job_text": job_text, "liveness": liveness}
+                            progress_area.write(f"✅ {result.company} — {result.tier} ({result.fit_score}/100)")
+                        except Exception as e:
+                            batch_errors[job_id] = str(e)
+                            progress_area.write(f"❌ {job.get('company') or 'Unknown'} — failed: {e}")
+                st.session_state.batch_deep_dive_results = batch_results
+                st.session_state.batch_deep_dive_errors = batch_errors
+                progress_area.update(
+                    label=f"Deep Dive complete: {len(batch_results)} succeeded, {len(batch_errors)} failed",
+                    state="complete",
+                )
+
+        batch_results = st.session_state.get("batch_deep_dive_results") or {}
+        batch_errors = st.session_state.get("batch_deep_dive_errors") or {}
+        # Only show results for jobs still in the current selection - if the
+        # user changes their Search & Score checkboxes after running Deep
+        # Dive, stale results from a job no longer selected shouldn't linger.
+        relevant_ids = [jid for jid in selected_ids if jid in batch_results or jid in batch_errors]
+
+        if relevant_ids:
+            st.divider()
+            st.markdown("#### Deep Dive results")
+            st.caption("Pick which of these should go on to tailoring + Auto-Fill.")
+
+            tier_color = {
+                "Strong fit": "green",
+                "Competitive": "blue",
+                "Stretch": "orange",
+                "Poor fit": "red",
+            }
+
+            proceed_ids = []
+            for jid in relevant_ids:
+                if jid in batch_errors:
+                    job = st.session_state.jobs_by_id.get(jid, {})
+                    st.error(f"{job.get('company', 'Unknown')}: {batch_errors[jid]}")
+                    continue
+                entry = batch_results[jid]
+                result = entry["result"]
+                color = tier_color.get(result.tier, "gray")
+                # Defaults to checked for anything the panel itself thought
+                # worth pursuing - the user can still uncheck individual
+                # ones before committing to tailor + auto-fill on them.
+                default_checked = result.recommendation in ("Apply", "Tailor first")
+                col_check, col_info = st.columns([0.4, 5.6])
+                with col_check:
+                    proceed = st.checkbox(
+                        "Proceed", key=f"batch_proceed_{jid}", value=default_checked, label_visibility="collapsed"
+                    )
+                with col_info:
+                    st.markdown(
+                        f"**{result.role_title}** at **{result.company}** — "
+                        f":{color}[{result.tier}] {result.fit_score}/100 · {result.recommendation}"
+                    )
+                    st.caption(result.tier_reason)
+                if proceed:
+                    proceed_ids.append(jid)
+
+            if proceed_ids and st.button(f"Tailor & Auto-Fill {len(proceed_ids)} selected", type="primary"):
+                if not api_key:
+                    st.error("Add your Anthropic API key in the sidebar first.")
+                else:
+                    apply_status = st.status(f"Processing {len(proceed_ids)} applications...", expanded=True)
+                    log = []
+                    # Sequential, not parallel - browser/autofill.py
+                    # serializes all Playwright work onto one dedicated
+                    # thread (see its own module docstring for why), so
+                    # this was never a choice; each one opens as a new tab
+                    # in the same browser window, one after another.
+                    for i, jid in enumerate(proceed_ids, start=1):
+                        entry = batch_results[jid]
+                        result = entry["result"]
+                        job_text = entry["job_text"]
+                        apply_status.write(f"[{i}/{len(proceed_ids)}] {result.company} — tailoring...")
+                        try:
+                            materials = generate_tailored_materials(
+                                resume_text=resume_text,
+                                job_text=job_text,
+                                company=result.company,
+                                role_title=result.role_title,
+                                top_gaps=result.top_gaps,
+                                resume_fixes=result.resume_fixes,
+                                api_key=api_key,
+                                deepseek_api_key=deepseek_api_key,
+                                role_profile=get_profile(result.role_profile),
+                            )
+
+                            safe_company = re.sub(r"[^\w\-]+", "_", result.company or "company")
+                            resume_pdf_path = os.path.join(
+                                tempfile.gettempdir(), f"batch_resume_{safe_company}_{jid}.pdf"
+                            )
+                            cover_pdf_path = os.path.join(
+                                tempfile.gettempdir(), f"batch_cover_{safe_company}_{jid}.pdf"
+                            )
+                            render_resume_pdf(
+                                materials["tailored_resume_markdown"],
+                                resume_pdf_path,
+                                location=result.location,
+                                candidate_tagline=materials.get("candidate_tagline", ""),
+                                linkedin_url=linkedin_url,
+                                portfolio_url=portfolio_url,
+                                github_url=github_url,
+                                core_competencies=materials.get("core_competencies", []),
+                            )
+                            render_cover_letter_pdf(
+                                materials["cover_letter"],
+                                cover_pdf_path,
+                                location=result.location,
+                                candidate_name=materials.get("candidate_name", ""),
+                                linkedin_url=linkedin_url,
+                                portfolio_url=portfolio_url,
+                                github_url=github_url,
+                            )
+
+                            apply_status.write(f"[{i}/{len(proceed_ids)}] {result.company} — opening application...")
+                            contact_info = parse_contact_info(resume_text)
+                            links = {
+                                "linkedin_url": linkedin_url,
+                                "portfolio_url": portfolio_url,
+                                "github_url": github_url,
+                            }
+                            fill_result = open_and_fill(
+                                url=result.job_url,
+                                resume_text=resume_text,
+                                company=result.company,
+                                role_title=result.role_title,
+                                contact_info=contact_info,
+                                links=links,
+                                resume_pdf_path=resume_pdf_path,
+                                cover_letter_pdf_path=cover_pdf_path,
+                                api_key=api_key,
+                                deepseek_api_key=deepseek_api_key,
+                            )
+
+                            if fill_result.status == "dead":
+                                apply_status.write(
+                                    f"⚠ {result.company} — posting looks closed, nothing opened. {fill_result.reason}"
+                                )
+                                log.append({"company": result.company, "status": "dead", "reason": fill_result.reason})
+                            elif fill_result.status == "error":
+                                apply_status.write(f"❌ {result.company} — {fill_result.reason}")
+                                log.append({"company": result.company, "status": "error", "reason": fill_result.reason})
+                            else:
+                                log_fill_attempt(
+                                    company=result.company,
+                                    role_title=result.role_title,
+                                    url=result.job_url,
+                                    fields_auto_mapped=fill_result.fields_auto_mapped,
+                                    fields_flagged=fill_result.fields_flagged,
+                                )
+                                apply_status.write(f"✅ {result.company} — opened and filled, review before submitting.")
+                                if fill_result.fields_flagged:
+                                    apply_status.write(f"   ⚠ Needs attention: {', '.join(fill_result.fields_flagged)}")
+                                log.append({
+                                    "company": result.company,
+                                    "status": "opened",
+                                    "fields_flagged": fill_result.fields_flagged,
+                                })
+                        except Exception as e:
+                            apply_status.write(f"❌ {result.company} — {e}")
+                            log.append({"company": result.company, "status": "error", "reason": str(e)})
+
+                    st.session_state.batch_apply_log = log
+                    opened_count = sum(1 for entry in log if entry["status"] == "opened")
+                    apply_status.update(
+                        label=f"Done: {opened_count}/{len(proceed_ids)} opened and filled — review each tab before submitting",
+                        state="complete",
+                    )
+
+# ---------------------------------------------------------------------------
+# TAB 4: Dashboard — everything you've deep-dived on, logged locally.
 # ---------------------------------------------------------------------------
 with tab_dashboard:
     st.subheader("All deep-dive evaluations")
@@ -1421,7 +1690,7 @@ with tab_dashboard:
         )
 
 # ---------------------------------------------------------------------------
-# TAB 4: Tracking — the manually-maintained application pipeline. Separate
+# TAB 5: Tracking — the manually-maintained application pipeline. Separate
 # from Dashboard on purpose: Dashboard logs every Deep Dive automatically;
 # this only holds jobs you explicitly chose to track (see data/pipeline.py).
 # ---------------------------------------------------------------------------
