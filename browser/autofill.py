@@ -317,6 +317,44 @@ _worker_browser = None
 _worker_context = None
 
 
+def _reset_executor():
+    """Discards the current worker thread entirely and spins up a fresh
+    one. Necessary, not just tidy - confirmed directly this is a real,
+    separate failure mode from the two above: once a thread has run
+    sync_playwright().start() successfully and the browser/driver later
+    dies (the user closed the window, the browser process crashed), trying
+    to start() Playwright again on that SAME thread fails with "using
+    Playwright Sync API inside the asyncio loop" - leftover internal
+    asyncio/greenlet state from the first start() lingers on the thread
+    even after the browser it was driving is long gone, and Playwright's
+    sync API has no supported way to clear that state short of never
+    touching that thread again. A brand new OS thread (from a brand new
+    executor) has no such history, so it's the only reliable fix - not a
+    retry of the same call, a genuinely different thread underneath it."""
+    global _executor, _worker_playwright, _worker_browser, _worker_context
+    _executor.shutdown(wait=False, cancel_futures=True)
+    _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="maester-playwright")
+    _worker_playwright = None
+    _worker_browser = None
+    _worker_context = None
+
+
+def _submit_to_worker(fn, *args):
+    """Runs `fn(*args)` on the dedicated Playwright worker thread and
+    blocks for the result. If the worker thread's Playwright state is
+    broken (see _reset_executor), retries exactly once on a fresh thread -
+    every other failure mode this module cares about (a dead posting, a
+    field that won't fill, a genuinely bad URL) is already caught inside
+    the worker functions themselves and returned as a normal result, never
+    raised, so anything that actually reaches this except clause is the
+    kind of infrastructure failure a fresh thread can plausibly fix."""
+    try:
+        return _executor.submit(fn, *args).result()
+    except Exception:
+        _reset_executor()
+        return _executor.submit(fn, *args).result()
+
+
 def _get_shared_context():
     """Must only ever be called from a job running on `_executor`'s worker
     thread. Launches the shared browser/context on first use, relaunches if
@@ -487,7 +525,7 @@ def scan_questions(url, api_key, deepseek_api_key="", session_key=None):
     thread via `_executor` (see the comment above `_get_shared_context`) -
     every Playwright object this touches, all the way down, must stay on
     that one thread for the life of the process."""
-    return _executor.submit(_scan_questions_worker, url, api_key, deepseek_api_key, session_key).result()
+    return _submit_to_worker(_scan_questions_worker, url, api_key, deepseek_api_key, session_key)
 
 
 def _scan_questions_worker(url, api_key, deepseek_api_key, session_key):
@@ -549,10 +587,10 @@ def open_and_fill(
     thread via `_executor` (see the comment above `_get_shared_context`) -
     every Playwright object this touches, all the way down, must stay on
     that one thread for the life of the process."""
-    return _executor.submit(
+    return _submit_to_worker(
         _open_and_fill_worker, url, resume_text, company, role_title, contact_info,
         links, resume_pdf_path, cover_letter_pdf_path, api_key, deepseek_api_key, session_key,
-    ).result()
+    )
 
 
 def _open_and_fill_worker(
