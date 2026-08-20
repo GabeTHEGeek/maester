@@ -24,7 +24,10 @@ legitimacy read, a compensation reliability read, and a seniority-aware
 freshness rating, all before you open a single tab. A "score a listing by
 URL" box lets you paste any listing directly, resolving it through the same
 accurate per-platform APIs (not a generic scrape) and registering it into
-the company registry.
+the company registry — including Greenhouse or Ashby boards embedded on a
+company's own careers domain (e.g. a `?gh_jid=` or `?ashby_jid=` URL), which
+are resolved straight to the real board API instead of scraping the
+client-rendered embed shell.
 
 **2. Role profiles** — A sidebar dropdown switches the entire lens Maester
 searches and judges through: title filters, rubric framing, the deep-dive
@@ -55,7 +58,14 @@ enforced in code, not just prompted for, with zero exceptions. Profile facts
 answer bank for common application questions are both editable from the
 in-app **Setup** tab — no manual JSON editing required.
 
-**6. Tracking** — A manually-maintained application pipeline
+**6. Batch** — Check off multiple listings on Search & Score, then run Deep
+Dive, Tailor & Export, and Auto-Fill on all of them together from the
+**Batch** tab instead of one at a time. Deep Dive runs concurrently across
+the selection; each listing still opens as its own browser tab for Auto-Fill
+and still stops short of submit — batching changes how many listings you
+process per click, not what the app is willing to do unsupervised.
+
+**7. Tracking** — A manually-maintained application pipeline
 (Saved/Applied/Interviewing/Offer/Rejected/Withdrawn), deliberately separate
 from the auto-populated Dashboard. Includes a funnel chart, status
 breakdown, an "applied by day" chart for outreach-goal tracking, and
@@ -63,11 +73,11 @@ conversion-rate metrics (response rate, interview rate, offer rate,
 rejection rate) computed off everyone who ever reached "Applied" or
 further.
 
-**7. Dashboard & notifications** — Every evaluation is logged locally,
+**8. Dashboard & notifications** — Every evaluation is logged locally,
 newest first, for comparison at a glance, with optional email summaries sent
 through your own SMTP account.
 
-**8. Automatic fallback** — Optional secondary provider so a billing hiccup
+**9. Automatic fallback** — Optional secondary provider so a billing hiccup
 mid-session doesn't stop your search.
 
 ## Stack
@@ -142,7 +152,8 @@ JSON editing needed). If you fork this repo, double-check
 - No invented experience, employers, or metrics — enforced as a hard rule
 - No auto-email unless you opt in
 - No cloud storage — everything stays local except what you send to the
-  Anthropic API (and, if you opt in, your own SMTP server)
+  Anthropic API, the optional DeepSeek fallback, and (if you opt in) your
+  own SMTP server
 
 ## Roadmap
 
