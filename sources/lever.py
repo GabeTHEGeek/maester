@@ -34,21 +34,36 @@ DEFAULT_BOARDS = [
 def _fetch_board(board_token: str, timeout: int = 15) -> list:
     """Fetch all postings from one company's Lever board. Returns [] on any
     failure (bad token, board not on Lever, network issue) rather than
-    raising, so one dead board doesn't kill a multi-board search."""
-    try:
-        resp = requests.get(
-            LEVER_URL.format(company=board_token),
-            params={"mode": "json"},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        # Lever returns a bare JSON array, not a wrapped object like
-        # Greenhouse/Ashby — an unexpected shape here (e.g. an error page
-        # that still returned 200) means treat it as no postings found.
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    raising, so one dead board doesn't kill a multi-board search.
+
+    Retries once on timeout/connection errors before giving up. Real evidence:
+    a handful of Lever boards (e.g. "jobgether", a marketplace reposting
+    ~3,900 third-party jobs under one account) return a JSON payload upwards
+    of 40MB, which intermittently exceeds the 15s timeout even though the
+    board is genuinely live and reachable — confirmed directly, the same
+    request succeeds in ~3s roughly 60% of the time and times out the rest.
+    Without a retry, one slow attempt permanently marks a real, working
+    company "failed" in the registry."""
+    for attempt in range(2):
+        try:
+            resp = requests.get(
+                LEVER_URL.format(company=board_token),
+                params={"mode": "json"},
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            # Lever returns a bare JSON array, not a wrapped object like
+            # Greenhouse/Ashby — an unexpected shape here (e.g. an error page
+            # that still returned 200) means treat it as no postings found.
+            return data if isinstance(data, list) else []
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt == 0:
+                continue
+            return []
+        except Exception:
+            return []
+    return []
 
 
 def _full_description(job: dict) -> str:
