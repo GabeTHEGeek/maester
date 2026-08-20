@@ -7,6 +7,7 @@ is one call per company: api.ashbyhq.com/posting-api/job-board/{board_name}.
 Docs: https://developers.ashbyhq.com/reference/jobboardapi-jobboard-info
 """
 
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -15,6 +16,20 @@ from sources._common import normalize_title, strip_html
 from utils.extract import extract_salary
 
 ASHBY_URL = "https://api.ashbyhq.com/posting-api/job-board/{board}"
+
+# Many companies embed an Ashby job board on their OWN custom careers domain
+# instead of using jobs.ashbyhq.com directly - a "?ashby_jid=<uuid>" query
+# param on their own domain (e.g. a real one confirmed directly:
+# 1mind.com/careers?ashby_jid=5a6b1b8f-7ad0-4afd-8916-538eb18627d9). Same
+# root problem as the Greenhouse embed case in sources/greenhouse.py: the
+# embedding page is itself client-rendered, so a generic scrape gets nav
+# chrome, not the job. The embed widget's own inline <script> IS present in
+# the static HTML though, and sets window.__ashbyBaseJobBoardUrl to the real
+# jobs.ashbyhq.com/<board> URL - that board token is what search_ashby needs.
+# Unlike Greenhouse there's no single-job-by-id endpoint in Ashby's public
+# API, so resolution fetches the whole board and matches by id instead.
+_ASHBY_JID_RE = re.compile(r"[?&]ashby_jid=([a-zA-Z0-9-]+)")
+_EMBED_BOARD_TOKEN_RE = re.compile(r"ashbyBaseJobBoardUrl\s*=\s*[\"']https?://jobs\.ashbyhq\.com/([a-zA-Z0-9_-]+)")
 
 # Company board names as used in their Ashby job board URL
 # (jobs.ashbyhq.com/{token}). Verify at that URL if a company you expect
@@ -56,6 +71,55 @@ def _compensation_to_salary(job: dict) -> str:
     if isinstance(summary, str) and summary.strip():
         return summary.strip()
     return ""
+
+
+def _normalize_job(job: dict, board: str) -> dict:
+    """Builds the same result shape search_ashby's loop produces, factored
+    out so resolve_embedded_job doesn't duplicate it."""
+    full_description = strip_html(job.get("descriptionHtml", ""))
+    salary = _compensation_to_salary(job) or extract_salary(full_description)
+    return {
+        "id": f"ab_{job.get('id')}",
+        "title": job.get("title", ""),
+        "company": board,
+        "url": job.get("jobUrl", "") or job.get("applyUrl", ""),
+        "location": job.get("location", ""),
+        "salary": salary,
+        "category": job.get("department", "") or job.get("team", ""),
+        "published": job.get("publishedAt", ""),
+        "description": full_description[:4000],
+        "source": "ashby",
+        "board": board,
+    }
+
+
+def resolve_embedded_job(url: str, timeout: int = 15) -> dict:
+    """Resolves an Ashby job embedded on a company's own custom careers
+    domain (a "?ashby_jid=<uuid>" URL, not jobs.ashbyhq.com) by recovering
+    the board token from the embed widget's own script tag and matching the
+    jid against that board's full listing - see the module comment above for
+    why. Returns None if the URL doesn't look like an Ashby embed at all (no
+    ashby_jid param), the page fetch fails, the embed script isn't found in
+    the page's static HTML, or the jid isn't in the board's current listing
+    (stale bookmark, closed role) - callers should fall back to a generic
+    page fetch in that case, not treat it as fatal."""
+    jid_match = _ASHBY_JID_RE.search(url)
+    if not jid_match:
+        return None
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+    except Exception:
+        return None
+    board_match = _EMBED_BOARD_TOKEN_RE.search(resp.text)
+    if not board_match:
+        return None
+    board = board_match.group(1)
+    jid = jid_match.group(1)
+    for job in _fetch_board(board, timeout=timeout):
+        if job.get("id") == jid:
+            return _normalize_job(job, board)
+    return None
 
 
 def search_ashby(
@@ -113,25 +177,7 @@ def search_ashby(
             if any(bad in title_normalized for bad in exclude_normalized):
                 continue
 
-            full_description = strip_html(job.get("descriptionHtml", ""))
-            salary = _compensation_to_salary(job) or extract_salary(full_description)
-            description = full_description[:4000]
-
-            jobs.append(
-                {
-                    "id": f"ab_{job.get('id')}",
-                    "title": title,
-                    "company": board,
-                    "url": job.get("jobUrl", "") or job.get("applyUrl", ""),
-                    "location": job.get("location", ""),
-                    "salary": salary,
-                    "category": job.get("department", "") or job.get("team", ""),
-                    "published": job.get("publishedAt", ""),
-                    "description": description,
-                    "source": "ashby",
-                    "board": board,
-                }
-            )
+            jobs.append(_normalize_job(job, board))
             board_job_count += 1
             # Per-board cap, not shared globally — see job_source_greenhouse.py
             # for why: a global cap starves companies later in iteration order.

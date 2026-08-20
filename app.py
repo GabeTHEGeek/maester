@@ -892,10 +892,10 @@ with tab_search:
         "Paste a job URL directly",
         key="score_url_input",
         placeholder="https://job-boards.greenhouse.io/company/jobs/12345",
-        help="Recognizes Greenhouse, Ashby, Lever, Gem, and BambooHR URLs (including a Greenhouse board "
-        "embedded on a company's own custom careers domain, e.g. a \"?gh_jid=\" URL) and pulls the real "
-        "listing data the same way a search would, registering the company in the registry below for "
-        "future searches. Other career pages get a best-effort page scrape instead.",
+        help="Recognizes Greenhouse, Ashby, Lever, Gem, and BambooHR URLs (including a Greenhouse or Ashby "
+        "board embedded on a company's own custom careers domain, e.g. a \"?gh_jid=\" or \"?ashby_jid=\" "
+        "URL) and pulls the real listing data the same way a search would, registering the company in "
+        "the registry below for future searches. Other career pages get a best-effort page scrape instead.",
     )
     if st.button("Score this URL"):
         if not api_key:
@@ -912,16 +912,21 @@ with tab_search:
                     if job is None and not token:
                         # Not a recognized job-boards.greenhouse.io/ashby/
                         # lever/gem/bamboohr URL, but many companies embed a
-                        # Greenhouse board on their OWN custom careers domain
-                        # instead (a "?gh_jid=<id>" URL) - confirmed directly
-                        # this style of page is ALSO itself client-rendered,
+                        # Greenhouse or Ashby board on their OWN custom
+                        # careers domain instead (a "?gh_jid=<id>" or
+                        # "?ashby_jid=<uuid>" URL) - confirmed directly both
+                        # styles of page are ALSO themselves client-rendered,
                         # so a generic scrape gets nav chrome, not the job.
-                        # Resolve straight to Greenhouse's API using the
-                        # board token discovered from the embed widget's own
+                        # Resolve straight to the real API using the board
+                        # token discovered from the embed widget's own
                         # script tag, still present in the static HTML.
                         job = job_source_greenhouse.resolve_embedded_job(paste_url)
                         if job:
                             token, source = job["board"], "greenhouse"
+                        else:
+                            job = job_source_ashby.resolve_embedded_job(paste_url)
+                            if job:
+                                token, source = job["board"], "ashby"
                     if job is None:
                         # Unrecognized platform (custom career page), or a
                         # recognized one where this exact posting wasn't in
@@ -1121,6 +1126,10 @@ with tab_deep_dive:
             resolved = job_source_greenhouse.resolve_embedded_job(manual_url)
             if resolved:
                 parsed_company, parsed_source = resolved["board"], "greenhouse"
+            else:
+                resolved = job_source_ashby.resolve_embedded_job(manual_url)
+                if resolved:
+                    parsed_company, parsed_source = resolved["board"], "ashby"
         if resolved:
             target_job = resolved
         else:
