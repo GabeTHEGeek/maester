@@ -104,10 +104,15 @@ def format_published_date(raw: str) -> str:
 
 
 _ATS_URL_PATTERNS = [
-    (re.compile(r"job-boards\.greenhouse\.io/([^/]+)/"), "greenhouse"),
-    (re.compile(r"jobs\.ashbyhq\.com/([^/]+)/"), "ashby"),
-    (re.compile(r"jobs\.lever\.co/([^/]+)/"), "lever"),
-    (re.compile(r"jobs\.gem\.com/([^/]+)/"), "gem"),
+    # Trailing slash optional - a bare board-root URL like
+    # jobs.lever.co/petdesk (no path after the company) is real, common
+    # (someone copying the board's own homepage link), and previously fell
+    # through to a useless generic scrape instead of at least being
+    # recognized as this company/platform.
+    (re.compile(r"job-boards\.greenhouse\.io/([^/?#]+)/?"), "greenhouse"),
+    (re.compile(r"jobs\.ashbyhq\.com/([^/?#]+)/?"), "ashby"),
+    (re.compile(r"jobs\.lever\.co/([^/?#]+)/?"), "lever"),
+    (re.compile(r"jobs\.gem\.com/([^/?#]+)/?"), "gem"),
     # BambooHR's slug is the SUBDOMAIN, not a path segment after the domain
     # like the other three - e.g. https://blackrock.bamboohr.com/careers/31.
     (re.compile(r"https?://([^./]+)\.bamboohr\.com/"), "bamboohr"),
