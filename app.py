@@ -593,7 +593,14 @@ with tab_search:
                 sanitized_rows = []
                 for r in edited_rows:
                     company = (r.get("company") or "").strip()
-                    token = (r.get("token") or "").strip().lower() or company.lower().replace(" ", "")
+                    # An explicitly-typed token is trusted verbatim - some
+                    # platforms are case-sensitive (confirmed directly:
+                    # Lever's "BestEgg" 404s as "bestegg"), so forcing
+                    # lowercase here silently broke a real, working company.
+                    # Only the company-name-derived fallback gets lowercased,
+                    # since that's a guess, not something the user typed as
+                    # a token on purpose.
+                    token = (r.get("token") or "").strip() or company.lower().replace(" ", "")
                     if not company and not token:
                         continue  # a fully blank row added but never filled in — skip it
                     sanitized_rows.append({
