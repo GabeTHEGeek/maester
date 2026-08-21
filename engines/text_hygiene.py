@@ -19,17 +19,29 @@ import re
 # reported in real use). Stays intentionally short — full-sentence phrases
 # worth a dedicated rewrite pass, not every word in the larger banned-
 # vocabulary list in engines/tailor.py's prompt text.
-BANNED_PHRASES_NEEDING_REWRITE = [
-    "i'm drawn to",
-    "i am drawn to",
+#
+# Regexes, not plain substrings: a real generated letter used "I'm
+# PARTICULARLY drawn to Neighborly's mission..." - the plain substring
+# check for "i'm drawn to" never matches with a word inserted in the
+# middle, so it slipped straight through undetected. Each pattern allows
+# up to 3 filler words (an adverb or two) between the subject and "drawn
+# to" so "I'm particularly/really/especially drawn to" are all still
+# caught, without matching something genuinely unrelated further away in
+# the sentence.
+_BANNED_PHRASE_PATTERNS = [
+    re.compile(r"\bi(?:'m|\s+am)\s+(?:\w+\s+){0,3}drawn to\b", re.IGNORECASE),
 ]
 
 
 def find_banned_phrase(text: str) -> str:
-    lower_text = text.lower()
-    for phrase in BANNED_PHRASES_NEEDING_REWRITE:
-        if phrase in lower_text:
-            return phrase
+    """Returns the actual matched text (not just the canonical pattern), so
+    a caller passing this into a rewrite prompt points at exactly what's
+    really there - "I'm particularly drawn to," not a generic stand-in that
+    doesn't match what the model actually wrote."""
+    for pattern in _BANNED_PHRASE_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(0)
     return ""
 
 
