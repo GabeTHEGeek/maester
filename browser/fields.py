@@ -50,7 +50,7 @@ def _extract_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key, options=None, limit=None):
+def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key, options=None, limit=None, prior_answers=None):
     """Same no-invention rule as engines/tailor.py: draws only on what's
     actually in the resume, never fabricates an experience or credential to
     answer a question the resume doesn't actually support.
@@ -69,7 +69,18 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
     else fixed this session - so it's both asked for in the prompt AND
     enforced as a hard backstop below, consistent with this project's
     standing rule that a prompt instruction is a request, not a guarantee
-    (see CLAUDE.md)."""
+    (see CLAUDE.md).
+
+    `prior_answers` is every free-text answer already drafted earlier in
+    THIS SAME application. Real evidence: without it, several genuinely
+    different behavioral questions on one form (built-and-shipped, hands-on
+    with an LLM platform, brought a skeptical team along) all independently
+    reached for the identical resume anecdote, because each question was
+    drafted in isolation with no idea what the others had already said - a
+    resume only has so many standout stories, so the model keeps grabbing
+    the strongest one by default. Telling it what's already been used lets
+    it draw on a different part of the resume on purpose, and only repeat a
+    story when the question genuinely has no other honest answer."""
     if options:
         option_labels = [o["label"] for o in options]
         prompt = (
@@ -86,6 +97,19 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
         max_tokens = 60
     else:
         limit_instruction = f" HARD LIMIT: {limit} characters maximum, no exceptions." if limit else ""
+        prior_block = ""
+        if prior_answers:
+            joined = "\n".join(f"- {a}" for a in prior_answers)
+            prior_block = (
+                f"\n\nYou have ALREADY used the following answers for other questions on "
+                f"this SAME application:\n{joined}\n\n"
+                f"If this question can honestly be answered by drawing on a DIFFERENT "
+                f"part of the resume (a different role, project, or angle), do that instead "
+                f"of repeating the same example or phrasing again - a reviewer reading the "
+                f"whole application shouldn't see the same story every time. Only reuse an "
+                f"example already listed above if this specific question genuinely has no "
+                f"other honest answer in the resume."
+            )
         prompt = (
             f"Answer this job application question, grounded ONLY in the resume "
             f"below - never invent experience, employers, or metrics not already "
@@ -93,7 +117,7 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
             f"write an honest, concise one anyway rather than fabricating specifics. "
             f"Never use em dashes. Avoid AI-sounding filler phrases like \"I'm drawn "
             f"to\" that name a feeling without a concrete reason attached - say "
-            f"specifically why instead.{limit_instruction}\n\n"
+            f"specifically why instead.{limit_instruction}{prior_block}\n\n"
             f"COMPANY: {company}\nROLE: {role_title}\nQUESTION: {question_text}\n\n"
             f"RESUME:\n{resume_text}\n\n"
             f"Respond with ONLY the answer text, 2-4 sentences, no preamble, no "

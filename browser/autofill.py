@@ -635,6 +635,11 @@ def _open_and_fill_worker(
     # mode this session: a field marked as successfully filled that turned
     # out, on inspection, to still be genuinely blank.
     attempted = []
+    # Every free-text answer drafted so far in this SAME application - passed
+    # into each subsequent draft so it can deliberately reach for a different
+    # resume story instead of every question independently converging on the
+    # single strongest anecdote (see fields._draft_custom_answer).
+    prior_drafted_answers = []
 
     for entry in mapping:
         index = entry.get("index")
@@ -773,11 +778,13 @@ def _open_and_fill_worker(
                 draft = fields._draft_custom_answer(
                     question_text, resume_text, company, role_title, api_key, deepseek_api_key,
                     options=raw_entry.get("options"), limit=raw_entry.get("limit"),
+                    prior_answers=prior_drafted_answers,
                 )
                 filled_ok = fields.fill_answer(pw_page, raw_entry, locator, draft)
                 if filled_ok:
                     if not raw_entry.get("options"):
                         pw_page.evaluate(fields._FLAG_BANNER_JS, index)
+                        prior_drafted_answers.append(draft)
                     flagged.append(f"{field_label} (unreviewed AI draft)")
                 else:
                     flagged.append(f"{field_label} (drafted answer wasn't a valid option on this form)")
