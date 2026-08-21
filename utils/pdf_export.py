@@ -18,6 +18,38 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
+_VALEDICTIONS = (
+    "sincerely", "best regards", "kind regards", "warm regards", "regards",
+    "warmly", "respectfully", "best", "many thanks", "thank you", "thanks",
+)
+
+
+def _looks_like_signoff(paragraph: str, candidate_name: str) -> bool:
+    """True if `paragraph` is the model's own closing line despite being told
+    not to write one (the sign-off is handled entirely in code below) - the
+    bare name-only case (e.g. just "Gabriel Pendleton") AND the valediction-
+    plus-name case (e.g. "Sincerely, Gabriel Pendleton" or "Sincerely," /
+    "Gabriel Pendleton" as two separate short paragraphs). Real evidence:
+    the exact-name-only check this replaced missed "Sincerely, Gabriel
+    Pendleton" entirely, since that string is never equal to the bare name,
+    so a generated cover letter ended up with the model's own "Sincerely,
+    <name>" left in as a body paragraph AND the code's own "Best regards,
+    <name>" signoff appended after it - the name (and a valediction) shown
+    twice, back to back."""
+    if not candidate_name:
+        return False
+    normalized = re.sub(r"[,.]", "", paragraph.strip().lower()).strip()
+    name_normalized = re.sub(r"[,.]", "", candidate_name.strip().lower()).strip()
+    if normalized == name_normalized:
+        return True
+    for word in _VALEDICTIONS:
+        if normalized == word:
+            return True
+        if normalized.startswith(word) and normalized[len(word):].strip() == name_normalized:
+            return True
+    return False
+
+
 _STYLES = getSampleStyleSheet()
 _LINK_COLOR = "#1a5276"
 _PILL_BG = colors.HexColor("#DCEEFB")
@@ -407,11 +439,15 @@ def render_cover_letter_pdf(
 
     paragraphs = [p.strip() for p in cover_letter_text.split("\n\n") if p.strip()]
 
-    # If the model included a trailing name-only line despite being told not
-    # to (the sign-off is now handled entirely in code below), drop it here
-    # rather than showing the name twice.
-    if paragraphs and candidate_name and paragraphs[-1].strip().lower() == candidate_name.strip().lower():
+    # If the model included its own closing line(s) despite being told not to
+    # (the sign-off is handled entirely in code below), drop them here rather
+    # than showing a valediction and the name twice. Loops (capped) since a
+    # closing can be one combined paragraph ("Sincerely, <name>") or two
+    # separate short ones ("Sincerely," then "<name>").
+    strip_attempts = 0
+    while paragraphs and strip_attempts < 3 and _looks_like_signoff(paragraphs[-1], candidate_name):
         paragraphs = paragraphs[:-1]
+        strip_attempts += 1
 
     for p in paragraphs:
         story.append(Paragraph(_inline_markdown_to_reportlab(p.replace("\n", " ")), _LETTER_BODY_STYLE))
