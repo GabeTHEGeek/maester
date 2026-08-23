@@ -202,6 +202,7 @@ def run_panel(
     salary: str = "",
     model: str = "claude-sonnet-4-5-20250929",
     deepseek_api_key: str = "",
+    groq_api_key: str = "",
     role_profile: RoleProfile = None,
 ) -> PanelResult:
     """Run the job listing + resume through the panel and return a
@@ -230,6 +231,7 @@ Role: {role_title}
         anthropic_model=model,
         max_tokens=5000,
         deepseek_api_key=deepseek_api_key,
+        groq_api_key=groq_api_key,
     )
 
     try:
@@ -244,6 +246,7 @@ Role: {role_title}
             anthropic_model=model,
             max_tokens=8000,
             deepseek_api_key=deepseek_api_key,
+            groq_api_key=groq_api_key,
         )
         data = extract_json(text)
 

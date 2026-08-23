@@ -104,7 +104,7 @@ def _fetch_listing_by_url(url: str, token: str, source: str) -> dict:
     return None
 
 
-def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_api_key: str, role_profile) -> tuple:
+def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_api_key: str, role_profile, groq_api_key: str = "") -> tuple:
     """Fetches a listing's real text (falling back to a live fetch if the
     search result didn't already have a description, then a second live
     fetch if that still turned up no salary) and runs the full panel
@@ -160,6 +160,7 @@ def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_a
         location=job.get("location", ""),
         salary=salary,
         deepseek_api_key=deepseek_api_key,
+        groq_api_key=groq_api_key,
         role_profile=role_profile,
     )
     return result, job_text, liveness
@@ -249,6 +250,15 @@ with st.sidebar:
         "way (roughly $0.001 per call). If Anthropic returns a billing/credit error, "
         "Maester automatically retries with DeepSeek instead of failing outright. "
         "Leave blank to disable — a billing error will just fail normally, as before.",
+    )
+    groq_api_key = st.text_input(
+        "Groq API key (optional 2nd fallback, free)",
+        type="password",
+        value=os.environ.get("GROQ_API_KEY", ""),
+        help="Get one free at console.groq.com — no credit card, 14,400 requests/day. Tried "
+        "only if DeepSeek also fails or isn't set, after an Anthropic billing/timeout error "
+        "— a second safety net so a DeepSeek outage doesn't stop a search either. Leave "
+        "blank to disable.",
     )
     openai_api_key = st.text_input(
         "OpenAI API key (not yet used)",
@@ -888,7 +898,7 @@ with tab_search:
                 if new_jobs:
                     with st.spinner(f"Scoring {len(new_jobs)} new listings against your resume..."):
                         try:
-                            new_results = batch_score(resume_text, new_jobs, api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key)
+                            new_results = batch_score(resume_text, new_jobs, api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key, groq_api_key=groq_api_key)
                             results.extend(new_results)
                             # Only cache genuine successes — a failed attempt (grade "?")
                             # shouldn't get treated as "already scored" and silently block
@@ -987,7 +997,7 @@ with tab_search:
                         st.caption("Reused a cached score from a previous search.")
                     else:
                         scored = batch_score(
-                            resume_text, [job], api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key
+                            resume_text, [job], api_key, role_profile=active_profile, deepseek_api_key=deepseek_api_key, groq_api_key=groq_api_key
                         )
                         result = scored[0]
                         if result.grade != "?":
@@ -1186,7 +1196,7 @@ with tab_deep_dive:
             with st.spinner("Fetching listing and convening the panel..."):
                 try:
                     result, job_text, liveness = _run_deep_dive_for_job(
-                        target_job, resume_text, api_key, deepseek_api_key, active_profile
+                        target_job, resume_text, api_key, deepseek_api_key, active_profile, groq_api_key=groq_api_key
                     )
                     log_result(result)
                     # Persisted so the tailoring button below survives the rerun
@@ -1333,6 +1343,7 @@ with tab_deep_dive:
                         resume_fixes=result.resume_fixes,
                         api_key=api_key,
                         deepseek_api_key=deepseek_api_key,
+                        groq_api_key=groq_api_key,
                         # Matches the role profile the Deep Dive itself ran
                         # under (result.role_profile), not necessarily
                         # today's sidebar selection - the tailoring is
@@ -1451,6 +1462,7 @@ with tab_deep_dive:
                             cover_letter_pdf_path=cover_pdf_path,
                             api_key=api_key,
                             deepseek_api_key=deepseek_api_key,
+                            groq_api_key=groq_api_key,
                         )
 
                     if fill_result.status == "dead":
@@ -1524,7 +1536,7 @@ with tab_batch:
                 with ThreadPoolExecutor(max_workers=3) as executor:
                     futures = {
                         executor.submit(
-                            _run_deep_dive_for_job, job, resume_text, api_key, deepseek_api_key, active_profile
+                            _run_deep_dive_for_job, job, resume_text, api_key, deepseek_api_key, active_profile, groq_api_key=groq_api_key
                         ): job
                         for job in selected_jobs
                     }
@@ -1618,6 +1630,7 @@ with tab_batch:
                                 resume_fixes=result.resume_fixes,
                                 api_key=api_key,
                                 deepseek_api_key=deepseek_api_key,
+                                groq_api_key=groq_api_key,
                                 role_profile=get_profile(result.role_profile),
                             )
 
@@ -1668,6 +1681,7 @@ with tab_batch:
                                 cover_letter_pdf_path=cover_pdf_path,
                                 api_key=api_key,
                                 deepseek_api_key=deepseek_api_key,
+                                groq_api_key=groq_api_key,
                             )
 
                             if fill_result.status == "dead":

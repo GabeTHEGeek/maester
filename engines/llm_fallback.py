@@ -1,9 +1,15 @@
 """
 llm_fallback.py
-Wraps an Anthropic API call with an automatic fallback to DeepSeek when
-Anthropic returns a billing/credit error. Used by rubric_engine.py,
-panel_engine.py, and tailor_engine.py so all three stages share one
-fallback path instead of three separate ad-hoc implementations.
+Wraps an Anthropic API call with an automatic fallback chain: DeepSeek
+first, then Groq, when Anthropic returns a billing/credit error or times
+out. Used by rubric_engine.py, panel_engine.py, and tailor_engine.py so all
+three stages share one fallback path instead of three separate ad-hoc
+implementations.
+
+Groq is the third tier, tried only if DeepSeek also fails (or no DeepSeek
+key is set) - real, free capacity (14,400 requests/day, no credit card)
+meant to survive both an Anthropic billing hiccup AND a DeepSeek outage in
+the same session, not to replace DeepSeek as the default fallback.
 
 Switched from Gemini after hitting its free-tier limits twice in real use —
 first 5 requests/minute, then a 20-requests/day cap on gemini-3.6-flash that
@@ -92,6 +98,17 @@ OPENAI_MODEL = "gpt-5.6-sol"
 # it unsuitable for that regardless of which model name is used.
 GEMINI_DEFAULT_MODEL = "gemini-3.7-flash"
 
+# Groq IS wired into the real fallback chain, unlike OpenAI/Gemini above -
+# its free tier's 14,400-requests/day cap (confirmed via console.groq.com,
+# 720x Gemini's 20/day ceiling that made Gemini unusable) comfortably covers
+# a real batch scoring session instead of dying mid-search. Groq is
+# OpenAI-compatible (same as DeepSeek reusing the `anthropic` client via a
+# base_url swap, Groq reuses the `openai` client the same way), so it needs
+# no separate SDK - just openai.OpenAI pointed at Groq's endpoint.
+# openai/gpt-oss-120b is Groq's current flagship general-purpose model.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
+
 # DeepSeek's paid tier has a 2,500-concurrent-request limit, so unlike the
 # Gemini fallback this replaced, there's no need for aggressive cross-thread
 # rate limiting — a short retry-with-backoff is enough for an occasional
@@ -168,14 +185,20 @@ def call_with_fallback(
     max_tokens: int,
     deepseek_api_key: str = "",
     deepseek_model: str = DEEPSEEK_DEFAULT_MODEL,
+    groq_api_key: str = "",
+    groq_model: str = GROQ_DEFAULT_MODEL,
     temperature: float = 0.2,
 ) -> tuple:
     """Returns (response_text, provider_used) where provider_used is
-    "anthropic" or "deepseek". Tries Anthropic first; on a billing/credit
-    error, falls back to DeepSeek (via its Anthropic-compatible endpoint) if
-    a key was provided. If it's a billing error and no DeepSeek key is set,
-    the original error is re-raised so the user still sees the real problem
-    instead of a confusing new one.
+    "anthropic", "deepseek", or "groq". Tries Anthropic first; on a
+    billing/credit or timeout/connection error, falls back to DeepSeek (via
+    its Anthropic-compatible endpoint) if a key was provided, then to Groq
+    (via its OpenAI-compatible endpoint, free tier) if DeepSeek also fails
+    or has no key set. If none of the configured providers work, the
+    ORIGINAL Anthropic error is what surfaces (not DeepSeek's or Groq's) —
+    that's the error the user actually needs to see and act on, since a
+    provider that was never configured or never the real problem shouldn't
+    be what gets reported.
 
     Temperature defaults low (0.2, not the API default of ~1.0) because a
     hiring-fit score should mean the same thing if you run it on the same
@@ -209,49 +232,86 @@ def call_with_fallback(
         # so the elapsed time here can already be ~2x the request timeout.
         elapsed = time.monotonic() - _start
         print(f"[llm_fallback] Anthropic call failed after {elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
-        if not (_is_billing_error(e) or _is_timeout_or_connection_error(e)) or not deepseek_api_key:
+        anthropic_error = e
+        if not (_is_billing_error(e) or _is_timeout_or_connection_error(e)) or not (deepseek_api_key or groq_api_key):
             raise
+
+    if deepseek_api_key:
         print("[llm_fallback] Falling back to DeepSeek...")
+        deepseek_client = anthropic.Anthropic(
+            api_key=deepseek_api_key,
+            base_url=DEEPSEEK_BASE_URL,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+            max_retries=_MAX_SDK_RETRIES,
+        )
+        for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
+            _attempt_start = time.monotonic()
+            try:
+                response = deepseek_client.messages.create(
+                    model=deepseek_model,
+                    max_tokens=max_tokens,
+                    system=system_prompt,
+                    temperature=temperature,
+                    # DeepSeek's "flash" vs "thinking" distinction isn't actually
+                    # two different models — it's the same model name gated by
+                    # this parameter, and it defaults to ENABLED if omitted. Left
+                    # on, the model spends the entire max_tokens budget on visible
+                    # reasoning and never reaches the actual answer at all (seen
+                    # directly: a response containing only a ThinkingBlock, no
+                    # text block whatsoever). Explicitly disabling it is the
+                    # documented, tested way to get a direct answer instead.
+                    thinking={"type": "disabled"},
+                    messages=[{"role": "user", "content": user_prompt}],
+                )
+                print(f"[llm_fallback] DeepSeek call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
+                return _extract_text(response), "deepseek"
+            except Exception as e:
+                attempt_elapsed = time.monotonic() - _attempt_start
+                print(f"[llm_fallback] DeepSeek attempt {attempt + 1} failed after {attempt_elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
+                if not _is_rate_limit_error(e) or attempt == _MAX_RATE_LIMIT_RETRIES:
+                    break  # exhausted DeepSeek - fall through to Groq below, not an immediate raise
+                delay = _extract_retry_delay(e)
+                print(f"[llm_fallback] Rate limited, retrying in {delay:.1f}s...", flush=True)
+                time.sleep(delay)
 
-    deepseek_client = anthropic.Anthropic(
-        api_key=deepseek_api_key,
-        base_url=DEEPSEEK_BASE_URL,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
-        max_retries=_MAX_SDK_RETRIES,
-    )
-    last_error = None
-    for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
-        _attempt_start = time.monotonic()
-        try:
-            response = deepseek_client.messages.create(
-                model=deepseek_model,
-                max_tokens=max_tokens,
-                system=system_prompt,
-                temperature=temperature,
-                # DeepSeek's "flash" vs "thinking" distinction isn't actually
-                # two different models — it's the same model name gated by
-                # this parameter, and it defaults to ENABLED if omitted. Left
-                # on, the model spends the entire max_tokens budget on visible
-                # reasoning and never reaches the actual answer at all (seen
-                # directly: a response containing only a ThinkingBlock, no
-                # text block whatsoever). Explicitly disabling it is the
-                # documented, tested way to get a direct answer instead.
-                thinking={"type": "disabled"},
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            print(f"[llm_fallback] DeepSeek call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
-            return _extract_text(response), "deepseek"
-        except Exception as e:
-            attempt_elapsed = time.monotonic() - _attempt_start
-            print(f"[llm_fallback] DeepSeek attempt {attempt + 1} failed after {attempt_elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
-            if not _is_rate_limit_error(e) or attempt == _MAX_RATE_LIMIT_RETRIES:
-                raise
-            last_error = e
-            delay = _extract_retry_delay(e)
-            print(f"[llm_fallback] Rate limited, retrying in {delay:.1f}s...", flush=True)
-            time.sleep(delay)
+    if groq_api_key:
+        print("[llm_fallback] Falling back to Groq...")
+        groq_client = openai.OpenAI(
+            api_key=groq_api_key,
+            base_url=GROQ_BASE_URL,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+            max_retries=_MAX_SDK_RETRIES,
+        )
+        for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
+            _attempt_start = time.monotonic()
+            try:
+                response = groq_client.chat.completions.create(
+                    model=groq_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                content = response.choices[0].message.content
+                if not content:
+                    raise ValueError(f"Empty content in Groq response: {response!r}")
+                print(f"[llm_fallback] Groq call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
+                return content, "groq"
+            except Exception as e:
+                attempt_elapsed = time.monotonic() - _attempt_start
+                print(f"[llm_fallback] Groq attempt {attempt + 1} failed after {attempt_elapsed:.1f}s ({type(e).__name__}: {e})", flush=True)
+                if not _is_rate_limit_error(e) or attempt == _MAX_RATE_LIMIT_RETRIES:
+                    break  # exhausted Groq too - fall through to the original Anthropic error below
+                delay = _extract_retry_delay(e)
+                print(f"[llm_fallback] Rate limited, retrying in {delay:.1f}s...", flush=True)
+                time.sleep(delay)
 
-    raise last_error
+    # Every configured provider failed - surface the ORIGINAL Anthropic
+    # error, since that's the one that actually explains what went wrong
+    # (a billing issue, a timeout) rather than whatever DeepSeek/Groq did.
+    raise anthropic_error
 
 
 def call_openai(

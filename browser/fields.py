@@ -50,7 +50,7 @@ def _extract_json(text: str) -> dict:
     return json.loads(match.group(0))
 
 
-def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key, options=None, limit=None, prior_answers=None):
+def _draft_custom_answer(question_text, resume_text, company, role_title, api_key, deepseek_api_key, groq_api_key="", options=None, limit=None, prior_answers=None):
     """Same no-invention rule as engines/tailor.py: draws only on what's
     actually in the resume, never fabricates an experience or credential to
     answer a question the resume doesn't actually support.
@@ -132,6 +132,7 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
         anthropic_model=FIELD_MAPPING_MODEL,
         max_tokens=max_tokens,
         deepseek_api_key=deepseek_api_key,
+        groq_api_key=groq_api_key,
     )
     text = text.strip()
 
@@ -144,7 +145,7 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
         banned_phrase = find_banned_phrase(text)
         if banned_phrase:
             text = _fix_banned_phrase_in_answer(
-                text, banned_phrase, question_text, api_key, deepseek_api_key
+                text, banned_phrase, question_text, api_key, deepseek_api_key, groq_api_key
             )
             text = strip_em_dashes(text)
 
@@ -153,7 +154,7 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
     return text
 
 
-def _fix_banned_phrase_in_answer(answer: str, phrase: str, question_text: str, api_key: str, deepseek_api_key: str = "") -> str:
+def _fix_banned_phrase_in_answer(answer: str, phrase: str, question_text: str, api_key: str, deepseek_api_key: str = "", groq_api_key: str = "") -> str:
     """Same rewrite-don't-delete approach as engines/tailor.py's cover-letter
     fixer: deleting the phrase outright leaves a broken sentence fragment,
     so this asks for a real rewrite of just the offending sentence."""
@@ -178,6 +179,7 @@ Respond with ONLY the full corrected answer text, no JSON, no commentary, no mar
         anthropic_model=FIELD_MAPPING_MODEL,
         max_tokens=400,
         deepseek_api_key=deepseek_api_key,
+        groq_api_key=groq_api_key,
     )
     return text.strip()
 
