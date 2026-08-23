@@ -291,7 +291,7 @@ def call_gemini(
     user_prompt: str,
     gemini_api_key: str,
     model: str = GEMINI_DEFAULT_MODEL,
-    max_tokens: int = 1000,
+    max_tokens: int = 2000,
     temperature: float = 0.2,
 ) -> str:
     """Standalone Gemini call, same treatment as call_openai above - wired
@@ -300,7 +300,19 @@ def call_gemini(
     fallback provider here and was dropped specifically because its free
     tier's request caps (5/min, then 20/day) made it fail mid-session on
     real usage - re-adding it as an automatic fallback would just walk back
-    into the same problem, regardless of which model name is current."""
+    into the same problem, regardless of which model name is current.
+
+    thinking_budget=0 is passed to try to disable extended reasoning, same
+    intent as DeepSeek's thinking={"type": "disabled"} - but confirmed
+    directly this model does NOT fully honor it: a max_tokens=20 call still
+    spent 99 tokens on invisible "thoughts" before any real output and came
+    back completely empty, identical in shape to the DeepSeek thinking-mode
+    bug this project already hit once (see CLAUDE.md). Unlike DeepSeek,
+    there's no way found so far to fully turn it off, so the default here is
+    set generously (2000, not 1000) to leave room for both the reasoning
+    tokens AND the actual answer - a caller passing a small max_tokens for a
+    short answer should still pass a real one, not assume 1:1 like the other
+    two providers."""
     client = genai.Client(api_key=gemini_api_key)
     response = client.models.generate_content(
         model=model,
@@ -309,6 +321,7 @@ def call_gemini(
             system_instruction=system_prompt,
             max_output_tokens=max_tokens,
             temperature=temperature,
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
         ),
     )
     if not response.text:
