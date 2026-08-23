@@ -289,6 +289,17 @@ def call_with_fallback(
                     model=groq_model,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    # Groq's gpt-oss models put reasoning in a separate field
+                    # BEFORE any real answer, same shape as DeepSeek's
+                    # thinking-mode bug - confirmed directly: a real Maester
+                    # call site (browser/fields.py's constrained-option
+                    # drafts, max_tokens=60) came back with 58 of 60 tokens
+                    # spent on hidden reasoning and EMPTY content. Unlike
+                    # Gemini (no working disable found), Groq/gpt-oss has a
+                    # real documented knob - reasoning_effort="low" cut
+                    # reasoning to 19 tokens on the same prompt and let the
+                    # real answer through within the same tight budget.
+                    reasoning_effort="low",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
