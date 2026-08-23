@@ -258,6 +258,16 @@ with st.sidebar:
         "but not yet wired into any scoring, Deep Dive, or Auto-Fill call — none of those "
         "read this key yet.",
     )
+    gemini_api_key = st.text_input(
+        "Gemini API key (not yet used)",
+        type="password",
+        value=os.environ.get("GEMINI_API_KEY", ""),
+        help="Get one at aistudio.google.com. Stored for this session and ready to use, "
+        "but not yet wired into any scoring, Deep Dive, or Auto-Fill call. Gemini was the "
+        "original fallback provider here and was dropped after its free tier's request caps "
+        "(5/min, then 20/day) made it fail mid-session on real usage — see CLAUDE.md. It's "
+        "back only as a standalone key, not as an automatic fallback.",
+    )
     st.divider()
     st.subheader("Role type")
     _profiles = list_profiles()

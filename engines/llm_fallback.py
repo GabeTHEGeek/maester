@@ -43,6 +43,8 @@ import time
 
 import anthropic
 import openai
+from google import genai
+from google.genai import types as genai_types
 
 _BILLING_ERROR_MARKERS = [
     "credit balance is too low",
@@ -81,6 +83,14 @@ DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 # Anthropic-primary/DeepSeek-fallback behavior.
 OPENAI_QUICK_MODEL = "gpt-5.6-luna"
 OPENAI_MODEL = "gpt-5.6-sol"
+
+# Gemini was tried before as a real fallback tier and dropped after hitting
+# its free tier's request caps twice in actual use (5 req/min, then a hard
+# 20 req/day ceiling - see the fallback-provider history above). Wired in
+# again here ONLY as a standalone, unused call path (same treatment as
+# OpenAI), never as an automatic fallback - the free tier's daily cap makes
+# it unsuitable for that regardless of which model name is used.
+GEMINI_DEFAULT_MODEL = "gemini-3.7-flash"
 
 # DeepSeek's paid tier has a 2,500-concurrent-request limit, so unlike the
 # Gemini fallback this replaced, there's no need for aggressive cross-thread
@@ -274,3 +284,33 @@ def call_openai(
     if not content:
         raise ValueError(f"Empty content in OpenAI response: {response!r}")
     return content
+
+
+def call_gemini(
+    system_prompt: str,
+    user_prompt: str,
+    gemini_api_key: str,
+    model: str = GEMINI_DEFAULT_MODEL,
+    max_tokens: int = 1000,
+    temperature: float = 0.2,
+) -> str:
+    """Standalone Gemini call, same treatment as call_openai above - wired
+    in and working, but not part of call_with_fallback's automatic fallback
+    chain. Deliberately kept out of that chain: Gemini was the ORIGINAL
+    fallback provider here and was dropped specifically because its free
+    tier's request caps (5/min, then 20/day) made it fail mid-session on
+    real usage - re-adding it as an automatic fallback would just walk back
+    into the same problem, regardless of which model name is current."""
+    client = genai.Client(api_key=gemini_api_key)
+    response = client.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config=genai_types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        ),
+    )
+    if not response.text:
+        raise ValueError(f"Empty text in Gemini response: {response!r}")
+    return response.text
