@@ -334,6 +334,7 @@ def generate_tailored_materials(
     model: str = TAILOR_MODEL,
     deepseek_api_key: str = "",
     groq_api_key: str = "",
+    primary: str = "anthropic",
     role_profile: RoleProfile = None,
 ) -> dict:
     """Returns {"candidate_name": str, "candidate_tagline": str,
@@ -371,6 +372,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         max_tokens=6000,
         deepseek_api_key=deepseek_api_key,
         groq_api_key=groq_api_key,
+        primary=primary,
     )
 
     try:
@@ -385,6 +387,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
             max_tokens=10000,
             deepseek_api_key=deepseek_api_key,
             groq_api_key=groq_api_key,
+            primary=primary,
         )
         data = extract_json(text)
 
@@ -407,21 +410,21 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         )
         if word_count > 300 or over_sentence_limit:
             data["cover_letter"] = _condense_cover_letter(
-                data["cover_letter"], api_key, model, deepseek_api_key, groq_api_key
+                data["cover_letter"], api_key, model, deepseek_api_key, groq_api_key, primary
             )
             data["cover_letter"] = strip_em_dashes(data["cover_letter"])
 
         banned_phrase = find_banned_phrase(data["cover_letter"])
         if banned_phrase:
             data["cover_letter"] = _fix_banned_phrase(
-                data["cover_letter"], banned_phrase, api_key, model, deepseek_api_key, groq_api_key
+                data["cover_letter"], banned_phrase, api_key, model, deepseek_api_key, groq_api_key, primary
             )
             data["cover_letter"] = strip_em_dashes(data["cover_letter"])
 
     return data
 
 
-def _fix_banned_phrase(cover_letter: str, phrase: str, api_key: str, model: str, deepseek_api_key: str = "", groq_api_key: str = "") -> str:
+def _fix_banned_phrase(cover_letter: str, phrase: str, api_key: str, model: str, deepseek_api_key: str = "", groq_api_key: str = "", primary: str = "anthropic") -> str:
     """Backstop for phrases the prompt already bans by name but that have
     been observed slipping through anyway — same lesson as the em-dash and
     word-limit backstops: a prompt instruction is a request, not a
@@ -450,6 +453,7 @@ Respond with ONLY the full corrected letter text, no JSON, no commentary, no mar
         max_tokens=1200,
         deepseek_api_key=deepseek_api_key,
         groq_api_key=groq_api_key,
+        primary=primary,
     )
     return text.strip()
 
@@ -531,7 +535,7 @@ def _strip_duplicate_summary_headline(markdown_text: str) -> str:
     return _SUMMARY_HEADLINE_RE.sub(repl, markdown_text, count=1)
 
 
-def _condense_cover_letter(cover_letter: str, api_key: str, model: str, deepseek_api_key: str = "", groq_api_key: str = "") -> str:
+def _condense_cover_letter(cover_letter: str, api_key: str, model: str, deepseek_api_key: str = "", groq_api_key: str = "", primary: str = "anthropic") -> str:
     """Word-limit enforcement backstop: the prompt asks for a 280-word, 3
     paragraph ceiling, but that's a request, not a guarantee. If the model
     still comes back over, ask it to condense rather than trust the first
@@ -558,5 +562,6 @@ Respond with ONLY the condensed letter text, no JSON, no commentary, no markdown
         max_tokens=1200,
         deepseek_api_key=deepseek_api_key,
         groq_api_key=groq_api_key,
+        primary=primary,
     )
     return text.strip()

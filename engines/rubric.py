@@ -118,7 +118,7 @@ def _score_to_grade(score: float) -> str:
     return "F"
 
 
-def _score_one(resume_text: str, job: dict, api_key: str, role_profile: RoleProfile, deepseek_api_key: str = "", groq_api_key: str = "") -> QuickScore:
+def _score_one(resume_text: str, job: dict, api_key: str, role_profile: RoleProfile, deepseek_api_key: str = "", groq_api_key: str = "", primary: str = "anthropic") -> QuickScore:
     tenure_note = compute_current_role_tenure(resume_text)
     tenure_block = f"\nVERIFIED FACT: {tenure_note}\n" if tenure_note else ""
     system_prompt = _build_system_prompt(role_profile)
@@ -140,6 +140,7 @@ Description: {job['description']}
         max_tokens=700,
         deepseek_api_key=deepseek_api_key,
         groq_api_key=groq_api_key,
+        primary=primary,
     )
     try:
         data = extract_json(text)
@@ -156,6 +157,7 @@ Description: {job['description']}
             max_tokens=1200,
             deepseek_api_key=deepseek_api_key,
             groq_api_key=groq_api_key,
+            primary=primary,
         )
         data = extract_json(text)
     return QuickScore(
@@ -185,6 +187,7 @@ def batch_score(
     role_profile: RoleProfile = None,
     deepseek_api_key: str = "",
     groq_api_key: str = "",
+    primary: str = "anthropic",
     max_workers: int = 5,
 ) -> list[QuickScore]:
     """Score every job in `jobs` against `resume_text` in parallel, return
@@ -195,7 +198,7 @@ def batch_score(
     results = []
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(_score_one, resume_text, job, api_key, role_profile, deepseek_api_key, groq_api_key): job
+            executor.submit(_score_one, resume_text, job, api_key, role_profile, deepseek_api_key, groq_api_key, primary): job
             for job in jobs
         }
         for future in as_completed(futures):

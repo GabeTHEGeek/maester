@@ -393,7 +393,7 @@ class _DiscoveryResult:
         self.mapping = mapping or []
 
 
-def _discover_and_map(url, api_key, deepseek_api_key, groq_api_key="", session_key=None):
+def _discover_and_map(url, api_key, deepseek_api_key, groq_api_key="", primary="anthropic", session_key=None):
     """Shared first half of both open_and_fill and scan_questions: liveness
     check, open a visible browser, get the right vendor adapter for this
     URL, click the 'Apply' reveal control if one is safely identifiable,
@@ -483,6 +483,7 @@ def _discover_and_map(url, api_key, deepseek_api_key, groq_api_key="", session_k
             max_tokens=2000,
             deepseek_api_key=deepseek_api_key,
             groq_api_key=groq_api_key,
+            primary=primary,
         )
         mapping = fields._extract_json(mapping_text).get("fields", [])
     except Exception as e:
@@ -509,7 +510,7 @@ def _discover_and_map(url, api_key, deepseek_api_key, groq_api_key="", session_k
     )
 
 
-def scan_questions(url, api_key, deepseek_api_key="", groq_api_key="", session_key=None):
+def scan_questions(url, api_key, deepseek_api_key="", groq_api_key="", primary="anthropic", session_key=None):
     """Ingests a listing's actual custom and demographic questions WITHOUT
     filling anything and without leaving a browser open - a lightweight
     preview step so answers can be crafted deliberately (reviewed, or handed
@@ -526,11 +527,11 @@ def scan_questions(url, api_key, deepseek_api_key="", groq_api_key="", session_k
     thread via `_executor` (see the comment above `_get_shared_context`) -
     every Playwright object this touches, all the way down, must stay on
     that one thread for the life of the process."""
-    return _submit_to_worker(_scan_questions_worker, url, api_key, deepseek_api_key, groq_api_key, session_key)
+    return _submit_to_worker(_scan_questions_worker, url, api_key, deepseek_api_key, groq_api_key, primary, session_key)
 
 
-def _scan_questions_worker(url, api_key, deepseek_api_key, groq_api_key, session_key):
-    discovery = _discover_and_map(url, api_key, deepseek_api_key, groq_api_key=groq_api_key, session_key=f"scan-{session_key or url}")
+def _scan_questions_worker(url, api_key, deepseek_api_key, groq_api_key, primary, session_key):
+    discovery = _discover_and_map(url, api_key, deepseek_api_key, groq_api_key=groq_api_key, primary=primary, session_key=f"scan-{session_key or url}")
 
     questions = []
     if discovery.status == "ok":
@@ -577,6 +578,7 @@ def open_and_fill(
     api_key,
     deepseek_api_key="",
     groq_api_key="",
+    primary="anthropic",
     session_key=None,
 ):
     """Pre-flight liveness check, then opens a visible browser on `url`, maps
@@ -591,7 +593,7 @@ def open_and_fill(
     that one thread for the life of the process."""
     return _submit_to_worker(
         _open_and_fill_worker, url, resume_text, company, role_title, contact_info,
-        links, resume_pdf_path, cover_letter_pdf_path, api_key, deepseek_api_key, groq_api_key, session_key,
+        links, resume_pdf_path, cover_letter_pdf_path, api_key, deepseek_api_key, groq_api_key, primary, session_key,
     )
 
 
@@ -607,9 +609,10 @@ def _open_and_fill_worker(
     api_key,
     deepseek_api_key,
     groq_api_key,
+    primary,
     session_key,
 ):
-    discovery = _discover_and_map(url, api_key, deepseek_api_key, groq_api_key=groq_api_key, session_key=session_key)
+    discovery = _discover_and_map(url, api_key, deepseek_api_key, groq_api_key=groq_api_key, primary=primary, session_key=session_key)
 
     if discovery.status in ("dead", "error"):
         return FillResult(status=discovery.status, reason=discovery.reason)
@@ -780,7 +783,7 @@ def _open_and_fill_worker(
                         continue
                 draft = fields._draft_custom_answer(
                     question_text, resume_text, company, role_title, api_key, deepseek_api_key,
-                    groq_api_key=groq_api_key, options=raw_entry.get("options"), limit=raw_entry.get("limit"),
+                    groq_api_key=groq_api_key, primary=primary, options=raw_entry.get("options"), limit=raw_entry.get("limit"),
                     prior_answers=prior_drafted_answers,
                 )
                 filled_ok = fields.fill_answer(pw_page, raw_entry, locator, draft)
