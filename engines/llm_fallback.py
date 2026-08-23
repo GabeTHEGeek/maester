@@ -42,6 +42,7 @@ import re
 import time
 
 import anthropic
+import openai
 
 _BILLING_ERROR_MARKERS = [
     "credit balance is too low",
@@ -65,6 +66,21 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic"
 # deepseek-chat/deepseek-reasoner (the older, commonly-referenced names) were
 # deprecated 2026-07-24. deepseek-v4-flash is the current non-thinking model.
 DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
+
+# OpenAI has no Anthropic-compatible endpoint (unlike DeepSeek), so it can't
+# reuse the `anthropic` client the way DeepSeek does - it needs its own SDK
+# and its own request/response shape (Chat Completions, not Messages).
+# Mirrors the same two-tier split already used for Anthropic (Haiku for the
+# cheap quick-scan rubric, Sonnet for everything expensive - Deep Dive,
+# Tailor & Export, Auto-Fill's field mapping and question drafting):
+# gpt-5.6-luna is OpenAI's current cost-optimized tier, gpt-5.6-sol its
+# current flagship. Not wired into call_with_fallback's automatic fallback
+# chain yet - call_openai() is a working, standalone call path, ready to be
+# plugged in once it's decided how OpenAI should actually fit (a third
+# fallback tier, a selectable primary, etc.), not a change to existing
+# Anthropic-primary/DeepSeek-fallback behavior.
+OPENAI_QUICK_MODEL = "gpt-5.6-luna"
+OPENAI_MODEL = "gpt-5.6-sol"
 
 # DeepSeek's paid tier has a 2,500-concurrent-request limit, so unlike the
 # Gemini fallback this replaced, there's no need for aggressive cross-thread
@@ -226,3 +242,35 @@ def call_with_fallback(
             time.sleep(delay)
 
     raise last_error
+
+
+def call_openai(
+    system_prompt: str,
+    user_prompt: str,
+    openai_api_key: str,
+    model: str = OPENAI_MODEL,
+    max_tokens: int = 1000,
+    temperature: float = 0.2,
+) -> str:
+    """Standalone OpenAI call, separate from call_with_fallback since OpenAI
+    needs its own SDK and request/response shape (Chat Completions, not the
+    Anthropic Messages format DeepSeek's compatible endpoint reuses). Not
+    invoked from anywhere in the app yet - this exists so the call path is
+    real and tested, ready to be wired into a specific provider strategy
+    (fallback tier, selectable primary, etc.) once that's decided, same
+    temperature default as the Anthropic path for the same reason (a score
+    should mean the same thing run twice)."""
+    client = openai.OpenAI(api_key=openai_api_key, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES)
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    content = response.choices[0].message.content
+    if not content:
+        raise ValueError(f"Empty content in OpenAI response: {response!r}")
+    return content

@@ -250,6 +250,14 @@ with st.sidebar:
         "Maester automatically retries with DeepSeek instead of failing outright. "
         "Leave blank to disable — a billing error will just fail normally, as before.",
     )
+    openai_api_key = st.text_input(
+        "OpenAI API key (not yet used)",
+        type="password",
+        value=os.environ.get("OPENAI_API_KEY", ""),
+        help="Get one at platform.openai.com. Stored for this session and ready to use, "
+        "but not yet wired into any scoring, Deep Dive, or Auto-Fill call — none of those "
+        "read this key yet.",
+    )
     st.divider()
     st.subheader("Role type")
     _profiles = list_profiles()

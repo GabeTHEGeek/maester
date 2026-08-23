@@ -1,5 +1,6 @@
 streamlit>=1.38
 anthropic>=0.34
+openai>=1.50
 requests>=2.32
 beautifulsoup4>=4.12
 reportlab>=4.0
