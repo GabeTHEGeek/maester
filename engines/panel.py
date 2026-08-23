@@ -9,7 +9,7 @@ from dataclasses import asdict, dataclass
 
 from role_profiles import DEFAULT_PROFILE_ID, RoleProfile, get_profile
 from utils.extract import compute_current_role_tenure
-from engines.llm_fallback import call_with_fallback, extract_json
+from engines.llm_fallback import call_with_fallback, estimate_cost, extract_json
 
 
 _SYSTEM_PROMPT_TEMPLATE = """You are a simulated hiring panel evaluating a candidate against a job listing.
@@ -164,6 +164,12 @@ class PanelResult:
     comp_reliability: str = ""
     comp_notes: str = ""
     role_profile: str = DEFAULT_PROFILE_ID
+    provider: str = ""
+    model: str = ""
+    elapsed_seconds: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_estimate: float | None = None
 
     def to_dict(self):
         return asdict(self)
@@ -225,7 +231,7 @@ Role: {role_title}
 {job_text}
 """
 
-    text, _provider = call_with_fallback(
+    text, _provider, usage = call_with_fallback(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         anthropic_api_key=api_key,
@@ -241,7 +247,7 @@ Role: {role_title}
     except (ValueError, json.JSONDecodeError):
         # Likely truncated mid-JSON. Retry once with a larger budget before giving up —
         # cheaper than failing the whole evaluation on an occasional long response.
-        text, _provider = call_with_fallback(
+        text, _provider, retry_usage = call_with_fallback(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             anthropic_api_key=api_key,
@@ -252,6 +258,16 @@ Role: {role_title}
             primary=primary,
         )
         data = extract_json(text)
+        # Sum both attempts - the failed truncated call still cost real
+        # tokens and time (see engines/rubric.py's _score_one, same fix).
+        usage = {
+            "provider": retry_usage["provider"],
+            "model": retry_usage["model"],
+            "elapsed_seconds": round(usage["elapsed_seconds"] + retry_usage["elapsed_seconds"], 2),
+            "input_tokens": usage["input_tokens"] + retry_usage["input_tokens"],
+            "output_tokens": usage["output_tokens"] + retry_usage["output_tokens"],
+        }
+        usage["cost_estimate"] = estimate_cost(usage["provider"], usage["model"], usage["input_tokens"], usage["output_tokens"])
 
     return PanelResult(
         company=company,
@@ -278,4 +294,10 @@ Role: {role_title}
         comp_reliability=data.get("comp_reliability", ""),
         comp_notes=data.get("comp_notes", ""),
         role_profile=role_profile.id,
+        provider=usage["provider"],
+        model=usage["model"],
+        elapsed_seconds=usage["elapsed_seconds"],
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        cost_estimate=usage["cost_estimate"],
     )

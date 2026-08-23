@@ -137,6 +137,36 @@ def _is_timeout_or_connection_error(exc: Exception) -> bool:
     return "timeout" in message or "timed out" in message
 
 
+# Confirmed current pricing (USD per million tokens), fetched directly from
+# claude.com/pricing and api-docs.deepseek.com/quick_start/pricing rather
+# than guessed. DeepSeek's rate varies by time of day (peak 01:00-04:00 and
+# 06:00-10:00 UTC) - the higher peak figure is used here so a shown estimate
+# is never an undercount. Groq is priced at $0 since it's currently used
+# under its free tier regardless of its paid on-demand rate. Anything not in
+# this table (a model swapped in, or run through a provider not listed)
+# just shows tokens with no dollar estimate rather than a wrong number.
+_PRICING_PER_MTOK = {
+    ("anthropic", "claude-haiku-4-5-20251001"): (1.00, 5.00),
+    ("anthropic", "claude-sonnet-4-5-20250929"): (3.00, 15.00),
+    ("deepseek", "deepseek-v4-flash"): (0.44, 1.32),
+    ("groq", "openai/gpt-oss-120b"): (0.0, 0.0),
+}
+
+
+def estimate_cost(provider: str, model: str, input_tokens, output_tokens):
+    """Best-effort USD estimate from the confirmed pricing above - not a
+    tracked or authoritative bill, just a same-order-of-magnitude figure to
+    show alongside a result. Returns None (never a guess) if usage wasn't
+    available on the response or the provider/model isn't in the table."""
+    if input_tokens is None or output_tokens is None:
+        return None
+    rates = _PRICING_PER_MTOK.get((provider, model))
+    if rates is None:
+        return None
+    input_rate, output_rate = rates
+    return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
+
+
 def _is_rate_limit_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "429" in message or "rate_limit" in message or "resource_exhausted" in message
@@ -192,8 +222,17 @@ def call_with_fallback(
     temperature: float = 0.2,
     primary: str = "anthropic",
 ) -> tuple:
-    """Returns (response_text, provider_used) where provider_used is
-    "anthropic", "deepseek", or "groq" - whichever tier actually answered.
+    """Returns (response_text, provider_used, usage) where provider_used is
+    "anthropic", "deepseek", or "groq" - whichever tier actually answered -
+    and usage is {"provider", "model", "elapsed_seconds", "input_tokens",
+    "output_tokens", "cost_estimate"} for surfacing to the UI (which model
+    actually scored this listing, how long it took, roughly what it cost).
+    cost_estimate is None when the provider/model isn't in the pricing
+    table or the response didn't report usage - never a guessed number.
+
+    Note: if _score_one/run_panel retry once on a truncated JSON response,
+    the caller is responsible for summing usage across both calls - this
+    function only reports the ONE call it actually made.
 
     `primary` picks which of the three goes first (a sidebar dropdown lets
     the user choose); the other two follow, in a fixed order, as fallback.
@@ -225,8 +264,17 @@ def call_with_fallback(
         if not key:
             continue
         try:
-            text = try_fn(system_prompt, user_prompt, key, model, max_tokens, temperature)
-            return text, tier
+            _call_start = time.monotonic()
+            text, input_tokens, output_tokens = try_fn(system_prompt, user_prompt, key, model, max_tokens, temperature)
+            usage = {
+                "provider": tier,
+                "model": model,
+                "elapsed_seconds": round(time.monotonic() - _call_start, 2),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_estimate": estimate_cost(tier, model, input_tokens, output_tokens),
+            }
+            return text, tier, usage
         except Exception as e:
             if first_error is None:
                 first_error = e
@@ -240,7 +288,7 @@ def call_with_fallback(
     raise first_error
 
 
-def _try_anthropic(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
+def _try_anthropic(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> tuple:
     client = anthropic.Anthropic(api_key=api_key, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES)
     _start = time.monotonic()
     try:
@@ -254,7 +302,7 @@ def _try_anthropic(system_prompt: str, user_prompt: str, api_key: str, model: st
         elapsed = time.monotonic() - _start
         if elapsed > 20:
             print(f"[llm_fallback] Anthropic call succeeded but took {elapsed:.1f}s", flush=True)
-        return _extract_text(response)
+        return _extract_text(response), response.usage.input_tokens, response.usage.output_tokens
     except Exception as e:
         # Nothing was printed here before — a slow-but-working request and a
         # genuinely frozen one looked identical from the terminal, since this
@@ -269,7 +317,7 @@ def _try_anthropic(system_prompt: str, user_prompt: str, api_key: str, model: st
         raise
 
 
-def _try_deepseek(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
+def _try_deepseek(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> tuple:
     client = anthropic.Anthropic(
         api_key=api_key, base_url=DEEPSEEK_BASE_URL, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES
     )
@@ -294,7 +342,7 @@ def _try_deepseek(system_prompt: str, user_prompt: str, api_key: str, model: str
                 messages=[{"role": "user", "content": user_prompt}],
             )
             print(f"[llm_fallback] DeepSeek call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
-            return _extract_text(response)
+            return _extract_text(response), response.usage.input_tokens, response.usage.output_tokens
         except Exception as e:
             last_error = e
             attempt_elapsed = time.monotonic() - _attempt_start
@@ -307,7 +355,7 @@ def _try_deepseek(system_prompt: str, user_prompt: str, api_key: str, model: str
     raise last_error
 
 
-def _try_groq(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> str:
+def _try_groq(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> tuple:
     client = openai.OpenAI(api_key=api_key, base_url=GROQ_BASE_URL, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES)
     last_error = None
     for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
@@ -347,7 +395,7 @@ def _try_groq(system_prompt: str, user_prompt: str, api_key: str, model: str, ma
             if not content:
                 raise ValueError(f"Empty content in Groq response: {response!r}")
             print(f"[llm_fallback] Groq call succeeded after {time.monotonic() - _attempt_start:.1f}s (attempt {attempt + 1})", flush=True)
-            return content
+            return content, response.usage.prompt_tokens, response.usage.completion_tokens
         except Exception as e:
             last_error = e
             attempt_elapsed = time.monotonic() - _attempt_start

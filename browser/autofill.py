@@ -475,7 +475,7 @@ def _discover_and_map(url, api_key, deepseek_api_key, groq_api_key="", primary="
         known_topics=topics if topics else "(none saved yet)"
     )
     try:
-        mapping_text, _provider = call_with_fallback(
+        mapping_text, _provider, _usage = call_with_fallback(
             system_prompt=mapping_system_prompt,
             user_prompt=mapping_prompt,
             anthropic_api_key=api_key,

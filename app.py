@@ -167,6 +167,26 @@ def _run_deep_dive_for_job(job: dict, resume_text: str, api_key: str, deepseek_a
     return result, job_text, liveness
 
 
+def _format_llm_provenance(provider: str, model: str, elapsed_seconds: float, input_tokens: int, output_tokens: int, cost_estimate) -> str:
+    """Shared by both the Search & Score results list and Deep Dive: which
+    model actually answered, how long it took, and roughly what it cost -
+    real evidence this matters, not just nice-to-have, since a listing's
+    score can come from three different providers depending on what's
+    configured and what's up, and the whole point of showing this is
+    letting the user actually see which one scored a given listing.
+    `provider` empty means a cached hit with no fresh LLM call to report on."""
+    if not provider:
+        return ""
+    bits = [f"⚙ {provider} ({model})", f"{elapsed_seconds:.1f}s"]
+    if input_tokens or output_tokens:
+        bits.append(f"{input_tokens:,} in / {output_tokens:,} out tokens")
+    if cost_estimate is not None:
+        bits.append(f"~${cost_estimate:.4f}" if cost_estimate >= 0.0001 else "<$0.0001")
+    elif provider == "groq":
+        bits.append("free tier")
+    return " · ".join(bits)
+
+
 def _sanitize_filename_part(text: str) -> str:
     # Collapses any run of non-alphanumeric characters (including a JD
     # title's own dashes/commas, e.g. "Ads - Shopping Catalogs") into a
@@ -686,6 +706,14 @@ with tab_search:
             help="Remotive matches your search against the full job description, not just the title, so a generic query can return unrelated roles that just happen to mention a search word somewhere. This requires the title itself to match the active role type.",
         )
 
+    force_rescan = st.checkbox(
+        "Force fresh scores (ignore cache)",
+        value=False,
+        help="A listing already scored in a previous search is normally reused as-is, no new API call. Check "
+        "this to re-score every matching listing from scratch instead, even ones already cached — the way to "
+        "get a genuinely new score after switching the Primary LLM provider above, since the cache doesn't "
+        "know or care which provider produced its stored score.",
+    )
     if st.button("Search & score", type="primary"):
         if not api_key:
             st.error("Add your Anthropic API key in the sidebar first.")
@@ -905,6 +933,8 @@ with tab_search:
                 seen = load_seen_urls()
 
                 def _cached_for_active_profile(job):
+                    if force_rescan:
+                        return False
                     row = seen.get(job.get("url"))
                     return row is not None and row.get("role_profile") == active_profile.id
 
@@ -1094,6 +1124,9 @@ with tab_search:
 
                     st.markdown(title_line)
                     st.caption(f"{r.reason}  \n:gray[{' · '.join(meta_bits)}]")
+                    provenance = _format_llm_provenance(r.provider, r.model, r.elapsed_seconds, r.input_tokens, r.output_tokens, r.cost_estimate)
+                    if provenance:
+                        st.caption(f":gray[{provenance}]")
                     if r.legitimacy_tier and r.legitimacy_tier != "High Confidence":
                         legit_color = "red" if r.legitimacy_tier == "Suspicious" else "orange"
                         st.caption(f":{legit_color}[⚠ {r.legitimacy_tier}] — {r.legitimacy_note}")
@@ -1269,6 +1302,9 @@ with tab_deep_dive:
             meta_bits.append(f"💰 {result.salary}")
         if meta_bits:
             st.caption(" · ".join(meta_bits))
+        provenance = _format_llm_provenance(result.provider, result.model, result.elapsed_seconds, result.input_tokens, result.output_tokens, result.cost_estimate)
+        if provenance:
+            st.caption(f":gray[{provenance}]")
         col_open, col_email, col_track = st.columns([1, 1, 1])
         with col_open:
             if result.job_url:

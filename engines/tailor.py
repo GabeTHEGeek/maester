@@ -364,7 +364,7 @@ Top gaps identified: {"; ".join(top_gaps) if top_gaps else "none noted"}
 Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none noted"}
 """
 
-    text, _provider = call_with_fallback(
+    text, _provider, _usage = call_with_fallback(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         anthropic_api_key=api_key,
@@ -379,7 +379,7 @@ Suggested resume fixes: {"; ".join(resume_fixes) if resume_fixes else "none note
         data = extract_json(text)
     except (ValueError, json.JSONDecodeError):
         # Same truncation safety net as the deep-dive panel.
-        text, _provider = call_with_fallback(
+        text, _provider, _usage = call_with_fallback(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             anthropic_api_key=api_key,
@@ -445,7 +445,7 @@ LETTER:
 
 Respond with ONLY the full corrected letter text, no JSON, no commentary, no markdown fences."""
 
-    text, _provider = call_with_fallback(
+    text, _provider, _usage = call_with_fallback(
         system_prompt="",
         user_prompt=fix_prompt,
         anthropic_api_key=api_key,
@@ -554,7 +554,7 @@ LETTER TO CONDENSE:
 
 Respond with ONLY the condensed letter text, no JSON, no commentary, no markdown fences."""
 
-    text, _provider = call_with_fallback(
+    text, _provider, _usage = call_with_fallback(
         system_prompt="",
         user_prompt=condense_prompt,
         anthropic_api_key=api_key,

@@ -125,7 +125,7 @@ def _draft_custom_answer(question_text, resume_text, company, role_title, api_ke
         )
         max_tokens = 400
 
-    text, _provider = call_with_fallback(
+    text, _provider, _usage = call_with_fallback(
         system_prompt="",
         user_prompt=prompt,
         anthropic_api_key=api_key,
@@ -173,7 +173,7 @@ ANSWER:
 
 Respond with ONLY the full corrected answer text, no JSON, no commentary, no markdown fences."""
 
-    text, _provider = call_with_fallback(
+    text, _provider, _usage = call_with_fallback(
         system_prompt="",
         user_prompt=fix_prompt,
         anthropic_api_key=api_key,
