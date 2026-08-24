@@ -195,15 +195,31 @@ def _fill_field(page, locator, value: str) -> bool:
     value when a real option is clicked, typed text alone doesn't do it.
 
     Returns True if the fill can be trusted, False if it can't - the caller
-    must check this and flag rather than auto-map on False. Three cases:
-    - No option menu ever appears at all -> True (an ordinary text field;
-      the plain .fill() above is the correct, complete answer).
+    must check this and flag rather than auto-map on False. Four cases:
+    - No option menu ever appears at all, and the field isn't a combobox ->
+      True (an ordinary text field; the plain .fill() above is the correct,
+      complete answer).
     - A menu appears and one option matches `value` -> True, after clicking
       the real option.
     - A menu appears but NOTHING matches `value` -> False. The stored
       answer's exact wording doesn't match what this employer's form
       actually offers - leaving typed, unregistered text in the box and
       calling it success is worse than flagging it.
+    - The field IS a combobox (role="combobox") but typing `value` produced
+      NO options at all, not even a non-matching menu -> also False, same
+      reasoning as the case above. Confirmed directly this distinction is
+      real, not theoretical: a saved profile fact of "Man" for a gender
+      field whose actual options were "Male"/"Female"/"Decline To Self
+      Identify" matched zero options (no substring overlap at all), which
+      this function used to read as "no menu ever appeared -> ordinary
+      text field -> True" - a false success that left "Man" sitting as
+      uncommitted search text, never actually selected, and silently
+      skipped the profile's own second saved phrasing ("Male") that WOULD
+      have matched, since the caller (_try_topic_answer) only moves on to
+      the next phrasing when this function reports False. Checking the
+      element's own role="combobox" attribute (present on every real
+      react-select input, absent on an ordinary text input) is what tells
+      the two "no options appeared" cases apart.
 
     Two things confirmed directly on a live Reddit application form, both
     needed for the True cases above to actually work rather than silently
@@ -218,6 +234,8 @@ def _fill_field(page, locator, value: str) -> bool:
       which unrelated field is being filled. An unscoped option search on
       such a form silently matches the wrong widget's option.
     """
+    is_combobox = (locator.get_attribute("role") or "").lower() == "combobox"
+
     locator.click()
     locator.fill(value)
 
@@ -225,7 +243,10 @@ def _fill_field(page, locator, value: str) -> bool:
     try:
         options.first.wait_for(state="visible", timeout=1200)
     except Exception:
-        return True  # no menu ever appeared - ordinary text field, .fill() stands as-is
+        if is_combobox:
+            _clear_and_close_combobox(locator)
+            return False
+        return True  # genuinely an ordinary text field - .fill() stands as-is
 
     matching = options.filter(has_text=value)
     try:
@@ -233,7 +254,26 @@ def _fill_field(page, locator, value: str) -> bool:
         matching.first.click()
         return True
     except Exception:
+        if is_combobox:
+            _clear_and_close_combobox(locator)
         return False  # a menu opened, but nothing in it matched - don't trust the raw typed text
+
+
+def _clear_and_close_combobox(locator) -> None:
+    """Clears uncommitted, non-matching search text AND explicitly closes
+    the menu (Escape), rather than leaving the combobox in an ambiguous
+    open-with-empty-search state. Confirmed directly this matters: without
+    the explicit close, a second _fill_field attempt right after a failed
+    one (e.g. _try_topic_answer retrying "Male" after "Man" matched
+    nothing) itself failed too - the leftover open-but-empty menu meant the
+    next .click() toggled the SAME menu closed instead of opening a fresh
+    one, so the real, exact-match "Male" option never got a chance to
+    render at all."""
+    locator.fill("")
+    try:
+        locator.press("Escape")
+    except Exception:
+        pass
 
 
 def _find_matching_option(options: list, value: str):
