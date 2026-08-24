@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from sources._common import normalize_title, strip_html
+from sources._common import normalize_title, strip_html, title_matches_query_word
 from utils.extract import extract_salary
 
 GREENHOUSE_URL = "https://boards-api.greenhouse.io/v1/boards/{board}/jobs"
@@ -192,7 +192,7 @@ def search_greenhouse(
             # Query match: at least one query word appears in the title (loose,
             # since Greenhouse boards are usually small enough that over-matching
             # isn't a real problem the way it was with Remotive's full-text search).
-            if query_words and not any(w in title_lower for w in query_words):
+            if query_words and not any(title_matches_query_word(w, title_lower) for w in query_words):
                 continue
 
             title_normalized = normalize_title(title)

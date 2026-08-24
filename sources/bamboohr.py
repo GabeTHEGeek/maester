@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from sources._common import normalize_title, strip_html
+from sources._common import normalize_title, strip_html, title_matches_query_word
 from utils.extract import extract_salary
 
 BAMBOOHR_LIST_URL = "https://{board}.bamboohr.com/careers/list"
@@ -116,7 +116,7 @@ def search_bamboohr(
         for job in raw_jobs:
             title = job.get("jobOpeningName", "")
             title_lower = title.lower()
-            if query_words and not any(w in title_lower for w in query_words):
+            if query_words and not any(title_matches_query_word(w, title_lower) for w in query_words):
                 continue
             title_normalized = normalize_title(title)
             if include_normalized is not None and not any(

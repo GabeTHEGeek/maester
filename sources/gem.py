@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from sources._common import normalize_title
+from sources._common import normalize_title, title_matches_query_word
 from utils.extract import extract_salary
 
 GEM_JOB_POSTS_URL = "https://api.gem.com/job_board/v0/{board}/job_posts"
@@ -111,7 +111,7 @@ def search_gem(
             title = (job.get("title") or "").strip()
             title_lower = title.lower()
 
-            if query_words and not any(w in title_lower for w in query_words):
+            if query_words and not any(title_matches_query_word(w, title_lower) for w in query_words):
                 continue
 
             title_normalized = normalize_title(title)
