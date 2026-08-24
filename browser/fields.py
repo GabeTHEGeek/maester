@@ -28,19 +28,6 @@ from engines.text_hygiene import find_banned_phrase, strip_em_dashes
 
 FIELD_MAPPING_MODEL = "claude-sonnet-4-5-20250929"
 
-_FLAG_BANNER_JS = """
-(index) => {
-  const el = document.querySelector(`[data-maester-index="${index}"]`);
-  if (!el) return;
-  const banner = document.createElement('div');
-  banner.textContent = '\\u26a0 Unreviewed AI draft \\u2014 check before submitting';
-  banner.setAttribute('data-maester-flag', 'true');
-  banner.style.cssText = 'color:#8a1f11;background:#fff0ef;border:1px solid #8a1f11;' +
-    'padding:4px 8px;font:12px -apple-system,sans-serif;margin:4px 0;border-radius:4px;';
-  el.insertAdjacentElement('afterend', banner);
-}
-"""
-
 
 def _extract_json(text: str) -> dict:
     text = re.sub(r"```(json)?", "", text).strip()

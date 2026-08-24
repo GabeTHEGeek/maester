@@ -789,7 +789,6 @@ def _open_and_fill_worker(
                 filled_ok = fields.fill_answer(pw_page, raw_entry, locator, draft)
                 if filled_ok:
                     if not raw_entry.get("options"):
-                        pw_page.evaluate(fields._FLAG_BANNER_JS, index)
                         prior_drafted_answers.append(draft)
                     flagged.append(f"{field_label} (unreviewed AI draft)")
                 else:
