@@ -167,7 +167,24 @@ def estimate_cost(provider: str, model: str, input_tokens, output_tokens):
     return (input_tokens * input_rate + output_tokens * output_rate) / 1_000_000
 
 
+def _is_oversized_request_error(exc: Exception) -> bool:
+    """A 'rate limit'-coded error whose actual cause is the request ITSELF
+    being too large for a per-minute token cap, not too many requests in a
+    window - retrying the identical request can never succeed, unlike a
+    genuine rate limit where waiting helps. Confirmed directly: a real
+    Tailor & Export call (11,728 tokens) against Groq's free-tier 8,000
+    tokens-per-minute cap got rejected with code "rate_limit_exceeded" -
+    which _is_rate_limit_error alone treats as retryable, so this burned 3
+    attempts and ~10s of pointless delay before finally falling through to
+    the next configured provider. Checked before the rate-limit retry loop
+    so this class of failure skips straight to the next tier instead."""
+    message = str(exc).lower()
+    return "reduce your message size" in message or "413" in message
+
+
 def _is_rate_limit_error(exc: Exception) -> bool:
+    if _is_oversized_request_error(exc):
+        return False
     message = str(exc).lower()
     return "429" in message or "rate_limit" in message or "resource_exhausted" in message
 
