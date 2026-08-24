@@ -267,7 +267,11 @@ def call_with_fallback(
     hiring-fit score should mean the same thing if you run it on the same
     listing twice — real evidence from actual use showed the same URL
     scoring 72/64/72 across three deep-dive runs, and 85 vs 88 (crossing an
-    actual recommendation-tier boundary) on another."""
+    actual recommendation-tier boundary) on another. This shared default is
+    what Anthropic and DeepSeek actually run at - both were confirmed
+    reliable at 0.2 (scripts/eval_groq_vs_deepseek.py), so there's no
+    evidence either needs lower. Groq alone gets a further, hardcoded
+    override to 0.0 inside _try_groq - see that function for why."""
     tiers = {
         "anthropic": (anthropic_api_key, anthropic_model, _try_anthropic),
         "deepseek": (deepseek_api_key, deepseek_model, _try_deepseek),
@@ -373,6 +377,19 @@ def _try_deepseek(system_prompt: str, user_prompt: str, api_key: str, model: str
 
 
 def _try_groq(system_prompt: str, user_prompt: str, api_key: str, model: str, max_tokens: int, temperature: float) -> tuple:
+    # Ignores the shared `temperature` param and forces 0.0 - confirmed
+    # directly (scripts/eval_groq_variants.py) that gpt-oss-120b's flip rate
+    # (6/10 grade flips across 3 identical runs, scripts/eval_groq_vs_deepseek.py)
+    # drops to 0/4 flips at temperature=0 vs 1/4 at the shared 0.2 default,
+    # with the lowest score-spread of any config tested. Anthropic and
+    # DeepSeek were confirmed reliable already at 0.2, so they keep the
+    # caller-supplied value instead of also dropping to 0 - no evidence they
+    # need it, and no reason to make their behavior stricter than tested.
+    # The same eval also confirmed response_format=json_object makes Groq's
+    # flip rate WORSE (2/4 flips) - likely truncating the reasoning it still
+    # does under reasoning_effort="low" before it reaches a real answer -
+    # so that was deliberately NOT added despite looking like a fix on paper.
+    groq_temperature = 0.0
     client = openai.OpenAI(api_key=api_key, base_url=GROQ_BASE_URL, timeout=_REQUEST_TIMEOUT_SECONDS, max_retries=_MAX_SDK_RETRIES)
     last_error = None
     for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
@@ -381,7 +398,7 @@ def _try_groq(system_prompt: str, user_prompt: str, api_key: str, model: str, ma
             response = client.chat.completions.create(
                 model=model,
                 max_tokens=max_tokens,
-                temperature=temperature,
+                temperature=groq_temperature,
                 # Groq's gpt-oss models put reasoning in a separate field
                 # BEFORE any real answer, same shape as DeepSeek's
                 # thinking-mode bug - confirmed directly: a real Maester

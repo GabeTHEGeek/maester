@@ -21,21 +21,23 @@ application when a listing is actually worth the time.
 (Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR) across a self-correcting
 company registry. Every result gets a fast rubric score, a posting
 legitimacy read, a compensation reliability read, and a seniority-aware
-freshness rating, all before you open a single tab. A "score a listing by
-URL" box lets you paste any listing directly, resolving it through the same
-accurate per-platform APIs (not a generic scrape) and registering it into
-the company registry — including Greenhouse or Ashby boards embedded on a
-company's own careers domain (e.g. a `?gh_jid=` or `?ashby_jid=` URL), which
-are resolved straight to the real board API instead of scraping the
-client-rendered embed shell.
+freshness rating, all before you open a single tab. Each score shows which
+provider actually answered, how long it took, and an estimated cost, with a
+one-click force-rescan if you want a fresh read instead of the cached one. A
+"score a listing by URL" box lets you paste any listing directly, resolving
+it through the same accurate per-platform APIs (not a generic scrape) and
+registering it into the company registry — including Greenhouse or Ashby
+boards embedded on a company's own careers domain (e.g. a `?gh_jid=` or
+`?ashby_jid=` URL), which are resolved straight to the real board API
+instead of scraping the client-rendered embed shell.
 
 **2. Role profiles** — A sidebar dropdown switches the entire lens Maester
 searches and judges through: title filters, rubric framing, the deep-dive
 panel's five personas, and tailoring archetypes all swap together. Ships
-with Product Manager, Customer Success, Account Executive, and Chief of
-Staff — each with real title include/exclude filters and a rubric gate
-written to judge transferable substance honestly, not just penalize a
-missing formal title.
+with Product Manager, Customer Success, Account Executive, Chief of Staff,
+and Software Engineer — each with real title include/exclude filters and a
+rubric gate written to judge transferable substance honestly, not just
+penalize a missing formal title.
 
 **3. Deep Dive** — On any listing worth a closer look, a full five-
 perspective panel (personas depend on the active role profile — e.g.
@@ -77,13 +79,20 @@ further.
 newest first, for comparison at a glance, with optional email summaries sent
 through your own SMTP account.
 
-**9. Automatic fallback** — Optional secondary provider so a billing hiccup
-mid-session doesn't stop your search.
+**9. Automatic fallback** — Three-tier provider chain (Anthropic → DeepSeek
+→ Groq, free) so a billing hiccup or timeout mid-session doesn't stop your
+search; a sidebar dropdown lets you pick which tier goes first, the other
+two follow automatically. Groq's fallback tier runs at a lower, tested
+temperature than the other two — a real consistency check found the
+default setting produced flip-flopping grades run-to-run on that specific
+model, and locking it down to 0 fixed it without needing to touch the
+other providers, which were already reliable.
 
 ## Stack
 
 - **Streamlit** — UI
-- **Anthropic API (Claude)** — tiered models for triage vs. deep evaluation
+- **Anthropic API (Claude)** — tiered models for triage vs. deep evaluation,
+  primary provider with DeepSeek and Groq as automatic fallbacks
 - **Remotive, Greenhouse, Ashby, Gem, Lever, BambooHR APIs** — live job search, no scraping
 - **Playwright** — visible-browser application auto-fill
 - **Plotly** — Tracking tab funnel, status, and time-series charts
@@ -109,8 +118,9 @@ mid-session doesn't stop your search.
    ```bash
    export ANTHROPIC_API_KEY=sk-ant-...
    ```
-   A DeepSeek key is optional but recommended as a fallback if Anthropic
-   billing hiccups mid-session.
+   A DeepSeek key and/or a free Groq key are optional but recommended as
+   fallbacks if Anthropic billing hiccups mid-session — either can also be
+   set as the primary provider from the sidebar dropdown.
 4. **Add your resume** — replace `sample_data/resume.md` with your own
    (gitignored, stays local — see "Your resume" below), or just paste it
    into the sidebar at runtime.
@@ -128,8 +138,8 @@ mid-session doesn't stop your search.
    Tailor & Export only need your resume.
 7. **(Optional) Set up local-only extras** — a `.env` file in the project
    root can hold `LINKEDIN_URL`, `PORTFOLIO_URL`, `GITHUB_URL` (pre-fill the
-   sidebar's link fields) and `DEEPSEEK_API_KEY`. `.env` is gitignored, never
-   committed.
+   sidebar's link fields), `DEEPSEEK_API_KEY`, and `GROQ_API_KEY`. `.env` is
+   gitignored, never committed.
 
 ## Your resume, profile, and answer bank
 
@@ -152,8 +162,8 @@ JSON editing needed). If you fork this repo, double-check
 - No invented experience, employers, or metrics — enforced as a hard rule
 - No auto-email unless you opt in
 - No cloud storage — everything stays local except what you send to the
-  Anthropic API, the optional DeepSeek fallback, and (if you opt in) your
-  own SMTP server
+  Anthropic API, the optional DeepSeek/Groq fallbacks, and (if you opt in)
+  your own SMTP server
 
 ## Roadmap
 
