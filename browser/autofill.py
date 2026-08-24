@@ -781,6 +781,9 @@ def _open_and_fill_worker(
                     if ok:
                         _record(True, prior_relationship_answer)
                         continue
+                if fields.looks_like_prompt_injection(question_text):
+                    flagged.append(f"{field_label} (skipped — question text appears to target an AI directly, needs manual review)")
+                    continue
                 draft = fields._draft_custom_answer(
                     question_text, resume_text, company, role_title, api_key, deepseek_api_key,
                     groq_api_key=groq_api_key, primary=primary, options=raw_entry.get("options"), limit=raw_entry.get("limit"),

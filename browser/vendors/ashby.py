@@ -39,6 +39,21 @@ _ASHBY_SCAN_FIELDS_JS = """
     if (skipped.includes(type)) return;
     if (el.getAttribute('aria-hidden') === 'true') return;
 
+    // Ashby's own "resume autofill" convenience upload - confirmed directly
+    // (real DOM inspection, openrouter's Customer Success Manager listing)
+    // this element lives inside a container carrying Ashby's own stable
+    // class `ashby-application-form-autofill-pane`, distinct from the real
+    // required Resume field's `ashby-application-form-field-entry`
+    // container. Uploading to this one triggers Ashby's own async
+    // resume-parsing/re-render, which invalidates every data-maester-index
+    // already assigned on the page - confirmed directly as the cause of a
+    // real run where the Resume field and every field after it (including
+    // Name/Email, already scanned earlier) failed with a stale-locator
+    // timeout. Skipped outright rather than relying on it happening to be
+    // unlabeled, which was documented as the intent below but never
+    // actually enforced in code.
+    if (el.closest('.ashby-application-form-autofill-pane')) return;
+
     // Ashby's own custom "Yes/No" button-toggle widget.
     if (type === 'checkbox' && el.getAttribute('tabindex') === '-1' && !el.closest('fieldset, [role="group"], [role="radiogroup"]')) {
       const container = el.parentElement;
@@ -145,17 +160,6 @@ _ASHBY_SCAN_FIELDS_JS = """
       const parentLabel = el.closest('label');
       if (parentLabel) labelText = parentLabel.innerText.trim();
     }
-    // Ashby's own "resume autofill" convenience upload (confirmed directly
-    // on a live Rula listing): a second, unlabeled file input near the top
-    // of the form. DELIBERATELY LEFT UNLABELED/UNFILLED - uploading to it
-    // triggers Ashby's own async resume-parsing, which then tries to
-    // auto-populate name/email/phone/etc. WHILE this module's own fill loop
-    // is simultaneously trying to fill those same fields through its own,
-    // verified process. Confirmed directly this causes real instability
-    // (the browser context terminating mid-run, not just a wrong value) -
-    // a first attempt at wiring this field in was reverted for exactly this
-    // reason. The real, required "Resume" field elsewhere on the form
-    // already gets filled correctly without this risk.
     const field = {
       index: i,
       tag: el.tagName.toLowerCase(),
