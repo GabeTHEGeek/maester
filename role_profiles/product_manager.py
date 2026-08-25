@@ -30,6 +30,7 @@ _TITLE_INCLUDE = [
     "product director",
     "chief product officer",
     "cpo",
+    "product builder",
 ]
 
 # Titles containing these words are hands-on IC engineering roles, not PM roles,
