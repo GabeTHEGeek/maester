@@ -1,12 +1,12 @@
 company,token,platform,status,last_checked,notes
-Anthropic,anthropic,greenhouse,verified,2026-08-23T21:23:02,Auto-discovered
-Airtable,airtable,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
-Mercury,mercury,greenhouse,verified,2026-08-23T08:50:04,Auto-discovered
+Anthropic,anthropic,greenhouse,verified,2026-08-26T14:21:44,Auto-discovered
+Airtable,airtable,greenhouse,verified,2026-08-26T14:21:44,Auto-discovered
+Mercury,mercury,greenhouse,verified,2026-08-26T14:21:44,Auto-discovered
 OpenAI,openai,ashby,verified,2026-08-23T10:28:57,Auto-discovered
 Databricks,databricks,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
 Notion,notion,ashby,verified,2026-08-14T23:30:40,Auto-discovered
 Ramp,ramp,ashby,verified,2026-08-17T14:36:34,Auto-discovered
-Scale AI,scaleai,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
+Scale AI,scaleai,greenhouse,verified,2026-08-25T15:37:15,Auto-discovered
 Webflow,webflow,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
 Vercel,vercel,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
 Linear,linear,ashby,verified,2026-08-14T23:30:40,Auto-discovered
@@ -20,7 +20,7 @@ Brex,brex,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
 Reddit,reddit,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
 Shopify,shopify,lever,failed,2026-08-14T23:30:46,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Plaid,plaid,ashby,verified,2026-08-14T23:30:40,Auto-discovered
-Supabase,supabase,ashby,verified,2026-08-14T23:30:40,Auto-discovered
+Supabase,supabase,ashby,verified,2026-08-25T09:23:52,Auto-discovered
 PostHog,posthog,ashby,verified,2026-08-14T23:30:40,Auto-discovered
 Cohere,cohere,ashby,verified,2026-08-14T23:30:40,Auto-discovered
 Twitch,twitch,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
@@ -31,7 +31,7 @@ Toptal,toptal,lever,verified,2026-08-14T23:30:40,Auto-discovered
 Upwork,upwork,greenhouse,verified,2026-08-23T08:52:20,Auto-discovered
 Atlassian,atlassian,lever,failed,2026-08-14T23:30:46,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Wiz,wiz,lever,failed,2026-08-14T23:30:46,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
-Rula,rula,ashby,verified,2026-08-14T23:30:40,Auto-discovered
+Rula,rula,ashby,verified,2026-08-25T08:25:06,Auto-discovered
 Vultron,vultron,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Popsql,popsql,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Manifest Law,manifest-law,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -237,7 +237,7 @@ Anrok,anrok,ashby,unverified,,Bulk-imported from a real ashby company directory 
 Wiseradvisor,wiseradvisor,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Titan Msp,titan-msp,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Epidemic Sound,epidemic-sound,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Retell Ai,retell-ai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Retell Ai,retell-ai,ashby,verified,2026-08-25T15:16:30,Auto-discovered
 Charge Robotics,charge-robotics,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Terac,terac,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Lindy,lindy,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -337,7 +337,7 @@ Carwow,carwow,ashby,unverified,,Bulk-imported from a real ashby company director
 Doppel,doppel,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Monsters,monsters,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Datafold,datafold,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Opusclip,opusclip,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Opusclip,opusclip,ashby,verified,2026-08-25T08:30:20,Auto-discovered
 Foresite Labs Fl2024 006,foresite-labs-fl2024-006,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Hellobrightline,hellobrightline,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Nautical Commerce,nautical-commerce,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
@@ -454,7 +454,7 @@ Blink,blink,ashby,unverified,,Bulk-imported from a real ashby company directory 
 Coverbase,coverbase,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Coefficientgiving,coefficientgiving,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Martian,martian,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Nectar Social,nectar-social,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Nectar Social,nectar-social,ashby,verified,2026-08-25T08:19:17,Auto-discovered
 Pear Vc,pear-vc,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Echo,echo,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Tenjin,tenjin,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -500,7 +500,7 @@ Atlasonc,atlasonc,ashby,unverified,,Bulk-imported from a real ashby company dire
 Infinitefield,infinitefield,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Freeagency,freeagency,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Jobs Page 4Dc2685B Eb82 46D1 A3F9 1F0764Dba814,jobs-page-4dc2685b-eb82-46d1-a3f9-1f0764dba814,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Buildout,buildout,ashby,verified,2026-08-01T00:07:09,Auto-discovered
+Buildout,buildout,ashby,verified,2026-08-25T15:45:26,Auto-discovered
 Clair,clair,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Scaler,scaler,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Handspring,handspring,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -667,7 +667,7 @@ Miaplaza,miaplaza,ashby,unverified,,Bulk-imported from a real ashby company dire
 Dovetail,dovetail,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Sesame,sesame,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Weave Grid,weave-grid,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Go Augment,go-augment,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Go Augment,go-augment,ashby,failed,2026-08-25T08:50:22,"Not found on any of: ashby, bamboohr, gem, greenhouse, lever"
 Casa,casa,unknown,unverified,,"Bulk-imported — appeared on 3 different directories (ashby, greenhouse, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Operator,operator,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Atomicsemi,atomicsemi,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -902,7 +902,7 @@ Promise Studios,promise-studios,ashby,unverified,,Bulk-imported from a real ashb
 Prodigy Education,prodigy-education,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Pryzm,pryzm,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Saris Ai,saris-ai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Weave,weave,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
+Weave,weave,ashby,verified,2026-08-25T09:07:10,Auto-discovered
 Fourier,fourier,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Searchable,searchable,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Arbor,arbor,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
@@ -1006,7 +1006,7 @@ Layern,layern,ashby,unverified,,Bulk-imported from a real ashby company director
 Flai,flai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Sent,sent,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Hashboard,hashboard,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Siro,siro,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Siro,siro,ashby,verified,2026-08-25T15:13:28,Auto-discovered
 Rabbithole,rabbithole,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Glow25,glow25,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Opfoundation,opfoundation,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -1024,7 +1024,7 @@ Partisiablockchain,partisiablockchain,ashby,unverified,,Bulk-imported from a rea
 Syrup,syrup,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Terrarium,terrarium,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Lilt,lilt,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Hopper,hopper,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
+Hopper,hopper,ashby,verified,2026-08-25T08:22:55,Auto-discovered
 Mosey,mosey,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Sequoia,sequoia,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Coinhako,coinhako,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
@@ -1135,7 +1135,7 @@ Datologyai,datologyai,ashby,unverified,,Bulk-imported from a real ashby company 
 Docebo,docebo,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Reset,reset,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Palup,palup,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Relevanceai,relevanceai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Relevanceai,relevanceai,ashby,verified,2026-08-25T15:57:04,Auto-discovered
 Keel,keel,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Multiply,multiply,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Slab,slab,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
@@ -1207,7 +1207,7 @@ Bestow,bestow,ashby,unverified,,Bulk-imported from a real ashby company director
 Contribution Labs,contribution-labs,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Stedi,stedi,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Witnessai,witnessai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Airops,airops,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Airops,airops,ashby,verified,2026-08-25T09:00:54,Auto-discovered
 Amperos,amperos,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Bifrost,bifrost,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Qawolf,qawolf,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -1824,7 +1824,7 @@ Zayzoon,zayzoon,unknown,unverified,,"Bulk-imported — appeared on 2 different d
 Believer,believer,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Product Updates,product-updates,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Coworker,coworker,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Whatnot,whatnot,ashby,failed,2026-07-31T21:56:27,"Not found on any of: ashby, gem, greenhouse, lever"
+Whatnot,whatnot,ashby,verified,2026-08-25T15:51:44,Auto-discovered
 Wursta,wursta,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (ashby, greenhouse), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Reevo,reevo,ashby,verified,2026-07-31T23:15:21,Auto-discovered
 Cartloop,cartloop,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -2084,7 +2084,7 @@ Liv Golf,liv-golf,ashby,unverified,,Bulk-imported from a real ashby company dire
 Newxel,newxel,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Aidkit,aidkit,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Anything,anything,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Assorthealth,assorthealth,ashby,verified,2026-08-17T18:27:41,Auto-discovered
+Assorthealth,assorthealth,ashby,verified,2026-08-25T09:17:24,Auto-discovered
 Jua,jua,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Jamssoftware,jamssoftware,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Palmstreet,palmstreet,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -2164,7 +2164,7 @@ Ideogram,ideogram,ashby,unverified,,Bulk-imported from a real ashby company dire
 Designworkstalent,designworkstalent,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Pearmill,pearmill,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Common Fund,common-fund,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Bland,bland,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Bland,bland,ashby,verified,2026-08-25T21:24:13,Auto-discovered
 Solveintelligence,solveintelligence,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Galvany,galvany,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Kota,kota,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -2234,7 +2234,7 @@ Comm,comm,ashby,unverified,,Bulk-imported from a real ashby company directory �
 Yotta,yotta,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Goodstack,goodstack,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Dashworks,dashworks,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Baseten,baseten,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Baseten,baseten,ashby,verified,2026-08-25T16:18:51,Auto-discovered
 Gaiafamily,gaiafamily,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Inngest,inngest,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Earthforce,earthforce,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -2261,7 +2261,7 @@ Moego,moego,unknown,unverified,,"Bulk-imported — appeared on 2 different direc
 Ceremonia,ceremonia,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Leandata,leandata,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Day9,day9,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Artian,artian,ashby,verified,2026-08-21T05:05:01,Auto-discovered
+Artian,artian,ashby,verified,2026-08-25T15:18:53,Auto-discovered
 Formal,formal,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Parkade,parkade,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Spaice Tech,spaice-tech,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -2438,7 +2438,7 @@ Continue,continue,ashby,unverified,,Bulk-imported from a real ashby company dire
 Orby Ai,orby-ai,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Runna,runna,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Idler,idler,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Wispr Flow,wispr-flow,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Wispr Flow,wispr-flow,ashby,verified,2026-08-28T09:13:13,Auto-discovered
 Genomics,genomics,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Maticrobots,maticrobots,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Pilgrim,pilgrim,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -3165,7 +3165,7 @@ Ethereum Foundation,ethereum-foundation,ashby,unverified,,Bulk-imported from a r
 Netboxlabs,netboxlabs,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Thewfsgroup,thewfsgroup,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Righthandtalent,righthandtalent,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
-Teamworks,teamworks,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
+Teamworks,teamworks,ashby,verified,2026-08-25T08:54:47,Auto-discovered
 Holywater,holywater,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Blockworks,blockworks,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
 Yobi,yobi,ashby,unverified,,Bulk-imported from a real ashby company directory — pending verification by an actual Maester search
@@ -3795,7 +3795,7 @@ Hudsonrouge,hudsonrouge,greenhouse,unverified,,Bulk-imported from a real greenho
 Cbemllc,cbemllc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Sanmar,sanmar,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Pubgseattle,pubgseattle,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Apolloio,apolloio,greenhouse,verified,2026-08-14T23:30:40,Auto-discovered
+Apolloio,apolloio,greenhouse,verified,2026-08-25T08:12:13,Auto-discovered
 Electriphi,electriphi,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Rab,rab,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Verusaerospace,verusaerospace,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -4375,7 +4375,7 @@ Keyfactorinc,keyfactorinc,greenhouse,unverified,,Bulk-imported from a real green
 Svetness,svetness,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Gatesventures,gatesventures,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Moodhealth,moodhealth,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Faire,faire,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Faire,faire,greenhouse,verified,2026-08-25T15:39:28,Auto-discovered
 Electreon,electreon,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Imc,imc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Northstar,northstar,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -4400,7 +4400,7 @@ Wri,wri,greenhouse,unverified,,Bulk-imported from a real greenhouse company dire
 Insightrx,insightrx,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Bloombergorg,bloombergorg,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Ariel,ariel,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Flyzipline,flyzipline,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (greenhouse, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
+Flyzipline,flyzipline,greenhouse,verified,2026-08-25T20:47:02,Auto-discovered
 Technicalassent,technicalassent,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Openspace,openspace,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Winrock,winrock,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -5938,7 +5938,7 @@ Familyoffice,familyoffice,greenhouse,unverified,,Bulk-imported from a real green
 Wideorbit,wideorbit,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Galy,galy,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Postmanlaw,postmanlaw,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Shopmy,shopmy,greenhouse,verified,2026-08-25T00:59:12,Auto-discovered
+Shopmy,shopmy,greenhouse,verified,2026-08-25T01:09:02,Auto-discovered
 Sodahealth,sodahealth,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Xphealth,xphealth,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Akriveiatherapeutics,akriveiatherapeutics,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -7244,7 +7244,7 @@ Fincent,fincent,greenhouse,unverified,,Bulk-imported from a real greenhouse comp
 Astrica,astrica,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Dunnhumby,dunnhumby,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Paper,paper,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Wizardcommerce,wizardcommerce,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Wizardcommerce,wizardcommerce,greenhouse,verified,2026-08-25T15:31:41,Auto-discovered
 Roarkcapitalgroup,roarkcapitalgroup,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Careaccess,careaccess,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Blueground,blueground,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -7329,7 +7329,7 @@ Rothesaygraduates,rothesaygraduates,greenhouse,unverified,,Bulk-imported from a 
 Promptworks,promptworks,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Synchron,synchron,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Bulletfarm,bulletfarm,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Cresta,cresta,greenhouse,verified,2026-08-15T08:53:15,Auto-discovered
+Cresta,cresta,greenhouse,verified,2026-08-25T15:54:57,Auto-discovered
 Girleffect,girleffect,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Css,css,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Barinthusbiotherapeutics,barinthusbiotherapeutics,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -8117,7 +8117,7 @@ Pirateship,pirateship,greenhouse,unverified,,Bulk-imported from a real greenhous
 Mitsogoinc,mitsogoinc,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Epicgamesfrench,epicgamesfrench,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Sourcingcour,sourcingcour,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Processstreet,processstreet,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Processstreet,processstreet,greenhouse,verified,2026-08-25T21:16:34,Auto-discovered
 Bigcommerce,bigcommerce,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Humanrightswatch,humanrightswatch,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Terakeet,terakeet,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -8507,7 +8507,7 @@ Calyxinstitute,calyxinstitute,greenhouse,unverified,,Bulk-imported from a real g
 Oneproject,oneproject,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Globalincomecoin,globalincomecoin,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Harrys,harrys,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Yipitdata,yipitdata,greenhouse,verified,2026-08-15T07:52:12,Auto-discovered
+Yipitdata,yipitdata,greenhouse,verified,2026-08-25T15:37:15,Auto-discovered
 Gostudent,gostudent,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Kindo,kindo,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Drw,drw,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -8908,7 +8908,7 @@ Hippo70,hippo70,greenhouse,unverified,,Bulk-imported from a real greenhouse comp
 Janeasystems,janeasystems,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Kodiak,kodiak,unknown,unverified,,"Bulk-imported — appeared on 2 different directories (greenhouse, lever), marked unknown rather than guessed since cross-list overlap has repeatedly turned out to be noise"
 Integralmolecular,integralmolecular,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
-Thenewyorktimes,thenewyorktimes,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
+Thenewyorktimes,thenewyorktimes,greenhouse,verified,2026-08-26T21:05:11,Auto-discovered
 Googlefiber,googlefiber,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Arenaai,arenaai,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
 Veesearch,veesearch,greenhouse,unverified,,Bulk-imported from a real greenhouse company directory — pending verification by an actual Maester search
@@ -26097,3 +26097,6 @@ Quinstreet,quinstreet,greenhouse,verified,2026-08-21T04:36:46,Auto-discovered
 neighborly Software,neighborly-software,ashby,verified,2026-08-24T17:44:37,Auto-discovered
 Work Hero,workhero,ashby,verified,2026-08-23T10:19:52,Auto-discovered
 Wand,wand,ashby,verified,2026-08-24T22:44:19,Auto-discovered
+Lance,lance,ashby,verified,2026-08-25T09:15:25,Auto-discovered
+Revin,revin,ashby,verified,2026-08-25T16:03:43,Auto-discovered
+within-ai,within-ai,ashby,verified,2026-08-25T21:08:09,Auto-discovered
