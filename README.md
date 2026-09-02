@@ -1,8 +1,16 @@
 # Maester
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-FF4B4B.svg)](https://streamlit.io/)
+[![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude-D97757.svg)](https://www.anthropic.com/claude)
+[![Last commit](https://img.shields.io/github/last-commit/GabeTHEGeek/maester.svg)](https://github.com/GabeTHEGeek/maester/commits/main)
+
 An AI hiring panel that searches live job listings, scores them against your
 resume, and generates tailored, ATS-optimized applications — before you spend
 hours on a listing that was never going to land.
+
+![Maester's Tracking tab: a pipeline funnel, status breakdown, and activity chart over an application pipeline](docs/screenshot.png)
 
 ## Why I built this
 
